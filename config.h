@@ -105,7 +105,7 @@
 #define PACKAGE_NAME "cramore"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "cramore 0714e06-dirty"
+#define PACKAGE_STRING "cramore 3d6ce13-dirty"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "cramore"
@@ -114,13 +114,13 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0714e06-dirty"
+#define PACKAGE_VERSION "3d6ce13-dirty"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION "0714e06-dirty"
+#define VERSION "3d6ce13-dirty"
 
 /* Enable large inode numbers on Mac OS X 10.5.  */
 #ifndef _DARWIN_USE_64_BIT_INODE
