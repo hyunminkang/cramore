@@ -108,6 +108,8 @@ AC_CHECK_LIB(z, gzopen, [], [AC_MSG_ERROR([libz.{so,a} was not found. Please ins
 AC_CHECK_LIB([m],[erf],[AC_DEFINE([HAVE_ERF],[1],[libm includes erf])])
 AC_CHECK_LIB([m],[erfc],[AC_DEFINE([HAVE_ERFC],[1],[libm includes erfc])])
 
+AC_SUBST([include_htslib_mk], ["include \$(HTSDIR)/htslib.mk"])
+
 #LT_PREREQ([2.2])
 #LT_INIT([dlopen shared])
 

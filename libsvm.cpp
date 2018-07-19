@@ -47,6 +47,7 @@
 
 int libsvm_version = LIBSVM_VERSION;
 
+/*
 static inline double powi(double base, int times)
 {
     double tmp = base, ret = 1.0;
@@ -58,6 +59,7 @@ static inline double powi(double base, int times)
     }
     return ret;
 }
+*/
 
 #define INF HUGE_VAL
 #define TAU 1e-12

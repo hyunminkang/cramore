@@ -186,7 +186,7 @@ int32_t VariantManip::classify_variant(bcf_hdr_t *h, bcf1_t *v, Variant& var)
     var.end1 = var.pos1 + strlen(allele[0]) - 1;
     int32_t n_allele = bcf_get_n_allele(v);
 
-    uint32_t pos1 = var.pos1;
+    //uint32_t pos1 = var.pos1;
     //int32_t pos0 = pos1-1;
     var.ts = 0;
     var.tv = 0;
