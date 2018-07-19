@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+.autom4te.cache/
+.autom4te.cache/*
+*~
