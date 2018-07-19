@@ -53,10 +53,10 @@ int32_t cmdScMapSTAMPs(int32_t argc, char** argv) {
 
   uint32_t n2i[256] = {0};
   //memset(n2i, 0, sizeof(uint32_t)*256);
-  n2i['A'] = 0; n2i['a'] = 0;
-  n2i['C'] = 1; n2i['c'] = 1;
-  n2i['G'] = 2; n2i['g'] = 2;
-  n2i['T'] = 3; n2i['t'] = 3;    
+  n2i[(int32_t)'A'] = 0; n2i[(int32_t)'a'] = 0;
+  n2i[(int32_t)'C'] = 1; n2i[(int32_t)'c'] = 1;
+  n2i[(int32_t)'G'] = 2; n2i[(int32_t)'g'] = 2;
+  n2i[(int32_t)'T'] = 3; n2i[(int32_t)'t'] = 3;    
 
   int32_t nRead = 0;
   

@@ -204,7 +204,7 @@ int32_t cmdScMultinomGibbs(int32_t argc, char** argv) {
 	++nEmptyRows;
 	if ( geneThres > 1 ) {
 	  for(int32_t j=0; j < (int32_t)hdrs.size(); ++j) {
-	    if ( R[i] > 0 ) {
+	    if ( R[i][j] > 0 ) {
 	      ++nZero;
 	      colSums[j] -= R[i][j];
 	    }

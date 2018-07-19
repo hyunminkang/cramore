@@ -84,7 +84,7 @@ bool sc_dropseq_lib_t::add_read(int32_t snpid, int32_t cellid, const char* umi, 
 }
 
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls) {
-  double logdenom = 0;
+  //double logdenom = 0;
   double tmp;
   gls[0] = gls[1] = gls[2] = 1.0;
   for(sc_snp_droplet_it_t it = ssd->begin(); it != ssd->end(); ++it) {
