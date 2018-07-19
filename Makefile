@@ -267,16 +267,16 @@ OBJEXT = o
 PACKAGE = cramore
 PACKAGE_BUGREPORT = hmkang@umich.edu
 PACKAGE_NAME = cramore
-PACKAGE_STRING = cramore 7f4bd50-dirty
+PACKAGE_STRING = cramore 70976b3-dirty
 PACKAGE_TARNAME = cramore
 PACKAGE_URL = 
-PACKAGE_VERSION = 7f4bd50-dirty
+PACKAGE_VERSION = 70976b3-dirty
 PATH_SEPARATOR = :
 POW_LIB = 
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 7f4bd50-dirty
+VERSION = 70976b3-dirty
 abs_builddir = /home/hmkang/code/working/cramore
 abs_srcdir = /home/hmkang/code/working/cramore
 abs_top_builddir = /home/hmkang/code/working/cramore
@@ -620,7 +620,7 @@ cramore_SOURCES = cramore.cpp \
 	cmd_cram_digital_pileup.cpp \
 	cmd_cram_freemuxlet.cpp 
 
-cramore_LDADD = $(ALL_LDFLAGS) -lpthread -lz -lgomp -lhts
+cramore_LDADD = $(ALL_LDFLAGS) -lpthread -lz -lhts
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 

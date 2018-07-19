@@ -80,4 +80,4 @@ cramore_SOURCES = cramore.cpp \
 	cmd_cram_digital_pileup.cpp \
 	cmd_cram_freemuxlet.cpp 
 
-cramore_LDADD = $(ALL_LDFLAGS) -lpthread -lz -lgomp -lhts
+cramore_LDADD = $(ALL_LDFLAGS) -lpthread -lz -lhts
