@@ -59,6 +59,7 @@ class sc_dropseq_lib_t {
 };
 
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls);
+double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, double alpha);
 
 
 #endif

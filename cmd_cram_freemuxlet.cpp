@@ -22,6 +22,10 @@ struct dropD {
   }
 };
 
+
+///////////////////////////////////////////////////////////////////
+// Freemuxlet : Genotype-free deconvolution of scRNA-seq doublets
+//////////////////////////////////////////////////////////////////
 int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   //std::string gtfFile;
   std::string outPrefix;
@@ -73,12 +77,14 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   sc_dropseq_lib_t scl;
   int32_t nAlpha = (int32_t)gridAlpha.size();
 
+  // Read droplet information from the mux-pileup output
   notice("Reading barcode information from %s.cel.gz..", plpPrefix.c_str());
   tsv_reader tsv_bcdf( (plpPrefix + ".cel.gz").c_str() );
   while( tsv_bcdf.read_line() > 0 ) {
     scl.add_cell(tsv_bcdf.str_field_at(1));
   }
 
+  // Read SNP information from the mux-pileup output  
   tsv_reader tsv_varf( (plpPrefix + ".var.gz").c_str() );
 
   std::map<std::string, int32_t> chr2rid;
@@ -147,6 +153,56 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   // compute Bayes Factor for every pair of droplets sequentially
   std::vector<int32_t> clusts;
   int32_t nclusts = 0;
+
+  // First, calculate the heterozygosity of each droplet to determine which droplet is
+  // likely potentially doublets
+
+  htsFile* wmix = hts_open((outPrefix+".lmix").c_str(),"w");
+  hprintf(wmix, "ID\t\tNSNP\tREAD\tLLK0\tLLK2\tLDIFF\tDIFF.SNP\n");
+    
+  for(int32_t i=0; i < scl.nbcs; ++i) {
+    int32_t si = drops_srted[i];
+    if (i % 100 == 0 )
+      notice("Processing doublet likelihoods for %d droplets..", i+1);
+
+    int32_t nSNPs = 0;
+    int32_t nReads = 0;
+    
+    // likelihood calculation across the overlapping SNPs
+    std::map<int32_t,sc_snp_droplet_t* >::iterator it = scl.cell_umis[si].begin();
+
+    double llk0 = 0, llk2 = 0; // LLK of IBD0, IBD1, IBD2     
+    
+    while( it != scl.cell_umis[si].end() ) {
+      double gls[9] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+      double af = scl.snps[it->first].af;
+
+      // calculate genotype likelihoods
+      calculate_snp_droplet_doublet_GL(it->second, gls, 0.5);
+
+      double lk0 = 0, lk2 = 0;
+      double gps[3];
+      gps[0] = (1.0-af) * (1.0-af);
+      gps[1] = 2.0 * af * (1.0-af);
+      gps[2] = af * af;
+	
+      for(int32_t gi=0; gi < 3; ++gi) {
+	lk2 += ( gls[gi*3 + gi] * gps[gi] );
+	for(int32_t gj=0; gj < 3; ++gj) {
+	  lk0 += ( gls[gi*3 + gj] * gps[gi] * gps[gj] );
+	}
+      }
+      ++it;
+      nReads += (int32_t)it->second->size();
+      ++nSNPs;
+
+      llk0 += log(lk0);
+      llk2 += log(lk2);
+    }
+
+    hprintf(wmix,"%s\t%d\t%%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, nSNPs, nReads, llk0, llk2, llk2-llk0, (llk2-llk0)/nSNPs);
+  }
+  hts_close(wmix);
 
   // store pairwise distances
   std::vector< std::vector<dropD> > dropDs;
