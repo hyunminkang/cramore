@@ -116,8 +116,10 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
     notice("Reading barcode information from %s.cel.gz..", plpPrefix.c_str());
     tsv_reader tsv_bcdf( (plpPrefix + ".cel.gz").c_str() );
-    while( tsv_bcdf.read_line() > 0 ) {
-      scl.add_cell(tsv_bcdf.str_field_at(0));
+    for( int32_t i=0; tsv_bcdf.read_line() > 0; ++i ) {
+      if ( i != tsv_bcdf.int_field_at(0) )
+	error("The first column must be sequential number starting from zero, but observed %s at line %d in file %s.cel.gz", tsv_bcdf.str_field_at(0), i+1, plpPrefix.c_str());      
+      scl.add_cell(tsv_bcdf.str_field_at(1));
       //bcds.push_back(tsv_bcdf.str_field_at(0));
       //bcdCnts.push_back(tsv_bcdf.int_field_at(1));
     }
@@ -131,13 +133,15 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     notice("Reading variant information from %s.var.gz..", plpPrefix.c_str());    
     tsv_reader tsv_varf( (plpPrefix + ".var.gz").c_str() );
 
-    while( tsv_varf.read_line() > 0 ) {
-      int32_t rid = bcf_hdr_name2id(vr.cdr.hdr, tsv_varf.str_field_at(0));
+    for(int32_t i=0; tsv_varf.read_line() > 0; ++i) {
+      if ( i != tsv_varf.int_field_at(0) )
+	error("The first column must be sequential number starting from zero, but observed %s at line %d in file %s.var.gz", tsv_varf.str_field_at(0), i+1, plpPrefix.c_str());
+      int32_t rid = bcf_hdr_name2id(vr.cdr.hdr, tsv_varf.str_field_at(1));
       if ( rid < 0 )
-	error("Cannot find chromosome %s from VCF file", tsv_varf.str_field_at(0));
-      int32_t pos = tsv_varf.int_field_at(1);
-      char    ref = tsv_varf.str_field_at(2)[0];
-      char    alt = tsv_varf.str_field_at(3)[0];
+	error("Cannot find chromosome %s from VCF file", tsv_varf.str_field_at(1));
+      int32_t pos = tsv_varf.int_field_at(2);
+      char    ref = tsv_varf.str_field_at(3)[0];
+      char    alt = tsv_varf.str_field_at(4)[0];
 
       // find the variant from VCF
       while( ( !vr.eof ) && ( ( vr.cursor()->rid != rid ) || ( vr.cursor()->pos + 1 != pos ) || ( vr.cursor()->d.allele[0][0] != ref ) || ( vr.cursor()->d.allele[1][0] != alt ) ) ) {
@@ -646,7 +650,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   int ncells = 0;
   for(std::map<std::string,int32_t>::iterator it0 = scl.bc_map.begin(); it0 != scl.bc_map.end(); ++it0, ++ncells) {
     if ( ncells % 100 == 0 )
-      notice("Processing %d cells..", ncells);
+      notice("Demultiplexing %d droplets..", ncells);
     
     i = it0->second;
     if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUniqReads) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) continue;

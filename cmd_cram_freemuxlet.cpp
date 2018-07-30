@@ -158,11 +158,11 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   // likely potentially doublets
 
   htsFile* wmix = hts_open((outPrefix+".lmix").c_str(),"w");
-  hprintf(wmix, "ID\t\tNSNP\tREAD\tLLK0\tLLK2\tLDIFF\tDIFF.SNP\n");
+  hprintf(wmix, "INT_ID\tBARCODE\tNSNPs\tNREADs\tDBL.LLK\tSNG.LLK\tLOG.BF\tBFpSNP\n");
     
   for(int32_t i=0; i < scl.nbcs; ++i) {
     int32_t si = drops_srted[i];
-    if (i % 100 == 0 )
+    if (i % 1000 == 0 )
       notice("Processing doublet likelihoods for %d droplets..", i+1);
 
     int32_t nSNPs = 0;
@@ -192,15 +192,16 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	  lk0 += ( gls[gi*3 + gj] * gps[gi] * gps[gj] );
 	}
       }
-      ++it;
       nReads += (int32_t)it->second->size();
       ++nSNPs;
+      
+      ++it;
 
       llk0 += log(lk0);
       llk2 += log(lk2);
     }
 
-    hprintf(wmix,"%s\t%d\t%%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, nSNPs, nReads, llk0, llk2, llk2-llk0, (llk2-llk0)/nSNPs);
+    hprintf(wmix,"%d\t%s\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, scl.bcs[si].c_str(), nSNPs, nReads, llk0, llk2, llk0-llk2, (llk0-llk2)/nSNPs);
   }
   hts_close(wmix);
 

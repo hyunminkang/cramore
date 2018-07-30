@@ -105,15 +105,15 @@ double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, doub
     // 7 : ALT / HET -- a/2      1-a/2
     // 8 : ALT / ALT -- 0        1
 
-    gls[0] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1.0           : 0.0          ) + phredConv.phred2Err[bq] / 4 );
-    gls[1] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1. - alpha/2. : alpha/2      ) + phredConv.phred2Err[bq] / 4 );
-    gls[2] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1.0 - alpha   : alpha        ) + phredConv.phred2Err[bq] / 4 ) ;
-    gls[3] *= ( phredConv.phred2Mat[bq] * (al == 0 ? (1.+alpha)/2. : (1.-alpha)/2 ) + phredConv.phred2Err[bq] / 4) ;
-    gls[4] *= ( phredConv.phred2Mat[bq] * (al == 0 ? .5            : .5           ) + phredConv.phred2Err[bq] / 4 ) ;
-    gls[5] *= ( phredConv.phred2Mat[bq] * (al == 0 ? (1.-alpha)/2. : (1.+alpha)/2 ) + phredConv.phred2Err[bq] / 4) ;
-    gls[6] *= ( phredConv.phred2Mat[bq] * (al == 0 ? alpha         : 1.-alpha     ) + phredConv.phred2Err[bq] / 4) ;
-    gls[7] *= ( phredConv.phred2Mat[bq] * (al == 0 ? alpha/2.      : 1.-alpha/2.  ) + phredConv.phred2Err[bq] / 4) ;
-    gls[8] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 0.0           : 1.0          ) + phredConv.phred2Err[bq] / 4) ;    
+    gls[0] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1.0           : 0.0          ) + phredConv.phred2Err[bq] / 4. );
+    gls[1] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1. - alpha/2. : alpha/2.     ) + phredConv.phred2Err[bq] / 4. );
+    gls[2] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1.0 - alpha   : alpha        ) + phredConv.phred2Err[bq] / 4. );
+    gls[3] *= ( phredConv.phred2Mat[bq] * (al == 0 ? (1.+alpha)/2. : (1.-alpha)/2.) + phredConv.phred2Err[bq] / 4. );
+    gls[4] *= ( phredConv.phred2Mat[bq] * (al == 0 ? .5            : .5           ) + phredConv.phred2Err[bq] / 4. );
+    gls[5] *= ( phredConv.phred2Mat[bq] * (al == 0 ? (1.-alpha)/2. : (1.+alpha)/2.) + phredConv.phred2Err[bq] / 4. );
+    gls[6] *= ( phredConv.phred2Mat[bq] * (al == 0 ? alpha         : 1.-alpha     ) + phredConv.phred2Err[bq] / 4. );
+    gls[7] *= ( phredConv.phred2Mat[bq] * (al == 0 ? alpha/2.      : 1.-alpha/2.  ) + phredConv.phred2Err[bq] / 4. );
+    gls[8] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 0.0           : 1.0          ) + phredConv.phred2Err[bq] / 4. );    
 
     tmp = gls[0] + gls[1] + gls[2] + gls[3] + gls[4] + gls[5] + gls[6] + gls[7] + gls[8];
     gls[0] /= tmp;

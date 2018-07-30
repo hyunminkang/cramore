@@ -424,7 +424,7 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
     //hprintf(wC, "%s\t%d\n", it->first.c_str(), it->second);
   }
   for(int32_t i=0; i < (int32_t)v_bcs.size(); ++i) {
-    hprintf(wC, "%d\t%s\t%d\n", i, v_bcs[i].c_str(), i);
+    hprintf(wC, "%d\t%s\n", i, v_bcs[i].c_str());
   }
   v_bcs.clear();
   notice("Finished writing cell information");

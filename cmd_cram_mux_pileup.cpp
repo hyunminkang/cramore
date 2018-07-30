@@ -377,7 +377,7 @@ int32_t cmdCramMuxPileup(int32_t argc, char** argv) {
     //hprintf(wC, "%s\t%d\n", it->first.c_str(), it->second);
   }
   for(int32_t i=0; i < (int32_t)v_bcs.size(); ++i) {
-    hprintf(wC, "%s\t%d\n", v_bcs[i].c_str(), i);
+    hprintf(wC, "%d\t%s\t%d\n", i, v_bcs[i].c_str());
   }
   v_bcs.clear();
   notice("Finished writing cell information");
@@ -389,7 +389,7 @@ int32_t cmdCramMuxPileup(int32_t argc, char** argv) {
   //double tmp;
   //for(i=0, k=0; i < scl.nsnps; ++i) {
   for(i=0; i < scl.nsnps; ++i) {    
-    hprintf(wV, "%s\t%d\t%c\t%c\t%.5lf\n", rchroms[scl.snps[i].rid].c_str(), scl.snps[i].pos, scl.snps[i].ref, scl.snps[i].alt, 0.5*gp0s[i*3+1] + gp0s[i*3+2]);
+    hprintf(wV, "%d\t%s\t%d\t%c\t%c\t%.5lf\n", i, rchroms[scl.snps[i].rid].c_str(), scl.snps[i].pos, scl.snps[i].ref, scl.snps[i].alt, 0.5*gp0s[i*3+1] + gp0s[i*3+2]);
     
     std::map<int32_t,sc_snp_droplet_t*>& cells = scl.snp_umis[i];
     if ( cells.empty() ) continue;
