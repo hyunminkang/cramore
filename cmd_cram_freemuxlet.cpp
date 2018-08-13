@@ -504,7 +504,10 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       kClusts[i] = kBest;
     }
 
+    notice("Refining per-cluster genotype likelihoods..");
+
     clustPileup.clear();
+    clustPileup.resize(nSamples);
     for(int32_t i=0; i < scl.nbcs; ++i) {
       std::map<int32_t,snp_droplet_pileup>::const_iterator it = cell_snp_plps[i].begin();
       while(it != cell_snp_plps[i].end()) {
