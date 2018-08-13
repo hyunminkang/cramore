@@ -101,8 +101,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   pl.Read(argc, argv);
   pl.Status();
 
-  if ( plpPrefix.empty() || outPrefix.empty() )
-    error("Missing required option(s) : --plp and --out");
+  if ( plpPrefix.empty() || outPrefix.empty() || ( nSamples == 0 ) )
+    error("Missing required option(s) : --plp, --out, --nsample");
 
   if ( gridAlpha.empty() ) {
     gridAlpha.push_back(0);    
@@ -248,7 +248,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   //}
 
   std::vector<double> votes(nSamples);
-  std::vector<int32_t> clusts(nSamples,0);
+  std::vector<int32_t> clusts(nSamples,-1);
   for(int32_t i=0; i < scl.nbcs; ++i) {
     int32_t si = drops_srted[i];
     //bool clique = true;
@@ -325,6 +325,9 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 
       hprintf(wf, "%d\t%d\t%d\t%d\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, sj, nInformativeSNPs, nInformativeRead1, nInformativeRead2, nInformativeReadMin, llk0, llk1, llk2, llk2-llk0, (llk2-llk0)/(nInformativeSNPs+1.0));
 
+      if ( clusts[sj] < 0 )
+	error("i = %d, si = %d, j = %d, sj = %d, clust[%d] = %d", i, si, j, sj, sj, clusts[sj]);
+
       if ( llk0-llk2 > bfThres ) {
 	votes[clusts[sj]] -= 1.0;
       }
@@ -349,6 +352,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       }
     }
     clusts[si] = elected;
+    notice("clusts[%d] = %d", si, elected);
   }
 
   hts_close(wf);
