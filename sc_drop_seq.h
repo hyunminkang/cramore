@@ -4,9 +4,12 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <cmath>
 #include <stdint.h>
 
 #include "Error.h"
+
+#define MIN_NORM_GL 1e-6
 
 // read : read ID
 // unique read : (barcode, snp, umi)
@@ -59,8 +62,47 @@ class sc_dropseq_lib_t {
  sc_dropseq_lib_t() : nbcs(0), nsnps(0) {}
 };
 
+struct snp_droplet_pileup {
+  int32_t nreads;
+  int32_t nref;
+  int32_t nalt;
+  double  gls[9];
+  double  logdenom;
+
+  snp_droplet_pileup() : nreads(0), nref(0), nalt(0) {
+    std::fill(gls, gls+9, 1.0);    
+    logdenom = 0;
+  }
+
+  void merge(const snp_droplet_pileup& other) {
+    nreads += other.nreads;
+    nref += other.nref;
+    nalt += other.nalt;
+    logdenom += other.logdenom;
+    
+    for(int i=0; i < 9; ++i) gls[i] *= other.gls[i];
+    
+    double tmp = 0;
+    for(int i=0; i < 9; ++i) tmp += gls[i];
+    
+    logdenom += log(tmp);
+    
+    for(int i=0; i < 9; ++i) gls[i] /= tmp;
+    
+    for(int i=0; i < 9; ++i) {
+      if ( gls[i] < MIN_NORM_GL ) {
+	gls[i] = MIN_NORM_GL;
+      }
+    }
+    tmp = 0;
+    for(int i=0; i < 9; ++i) tmp += gls[i];
+    logdenom += log(tmp);
+    for(int i=0; i < 9; ++i) gls[i] /= tmp;    
+  }
+};
+
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls);
 double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, double alpha);
-
+double calculate_snp_droplet_pileup(sc_snp_droplet_t* ssd, snp_droplet_pileup& scp, double alpha); 
 
 #endif
