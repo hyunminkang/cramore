@@ -22,6 +22,38 @@ struct dropD {
   }
 };
 
+struct snpCellPileup {
+  int32_t nreads;
+  int32_t nref;
+  int32_t nalt;
+  double  gls[3];
+  double  logdenom;
+  
+  snpCellPileup() : nreads(0), nref(0), nalt(0) {
+    gls[0] = gls[1] = gls[2] = 1.0;
+    logdenom = 0;
+  }
+
+  void add_read(int32_t al, int32_t bq) {
+    //if ( bq > capBQ ) bq = capBQ;
+    if ( al > 1 ) return; 
+    
+    gls[0] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 1.0 : 0.0) + phredConv.phred2Err[bq] / 4.0 );
+    gls[1] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 0.5 : 0.5) + phredConv.phred2Err[bq] / 4.0 );
+    gls[2] *= ( phredConv.phred2Mat[bq] * (al == 0 ? 0.0 : 1.0) + phredConv.phred2Err[bq] / 4.0 );
+
+    if ( al == 0 )      { ++nref; }
+    else if ( al == 1 ) { ++nalt; }
+    ++nreads;
+
+    double tmp = gls[0] + gls[1] + gls[2];
+    logdenom += log(tmp);
+    gls[0] /= tmp;
+    gls[1] /= tmp;
+    gls[2] /= tmp;
+  }
+};
+
 
 ///////////////////////////////////////////////////////////////////
 // Freemuxlet : Genotype-free deconvolution of scRNA-seq doublets
@@ -38,6 +70,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   int32_t minTotalReads = 0;
   int32_t minUniqReads = 0;
   int32_t minCoveredSNPs = 0;
+  int32_t nSamples = 0;
+  double bfThres = 5.41;
 
   paramList pl;
 
@@ -49,6 +83,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
     LONG_MULTI_DOUBLE_PARAM("alpha",&gridAlpha, "Grid of alpha to search for (default is 0, 0.5)")
     LONG_DOUBLE_PARAM("doublet-prior",&doublet_prior, "Prior of doublet")
+    LONG_INT_PARAM("nsample",&nSamples,"Number of samples multiplexed together")
+    LONG_DOUBLE_PARAM("bf-thres",&bfThres,"Bayes Factor Threshold used in the initial clustering")    
     
     LONG_PARAM_GROUP("Read filtering Options", NULL)
     LONG_INT_PARAM("cap-BQ", &capBQ, "Maximum base quality (higher BQ will be capped)")
@@ -130,38 +166,21 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     sc_dropseq_lib_t* pscl;
     sc_drop_comp_t(sc_dropseq_lib_t* p) : pscl(p) {}
     bool operator()(const int32_t& lhs, const int32_t& rhs) const {
-      int32_t cmp = (int32_t) pscl->cell_uniq_reads[lhs] - (int32_t) pscl->cell_uniq_reads[rhs];
+      double cmp = pscl->cell_scores[lhs] - pscl->cell_scores[rhs];
       if ( cmp != 0 ) return cmp > 0;
       else return lhs > rhs;
     }
   };
 
   // sort cells based on the number of SNP-overlapping unique reads.
-  std::vector<int32_t> drops_srted(scl.nbcs);
-  for(int32_t i=0; i < scl.nbcs; ++i) drops_srted[i] = i;
-  sc_drop_comp_t sdc(&scl);
-  std::sort( drops_srted.begin(), drops_srted.end(), sdc );
-
-  /* test code: print out the sorted cells
-  for(int32_t i=0; i < scl.nbcs; ++i) {
-    int32_t j = drops_srted[i];
-    if ( i % 10 == 0 )
-      notice("%d\t%d\t%d\t%d\t%d\t%u", i, j, scl.cell_totl_reads[j], scl.cell_pass_reads[j], scl.cell_uniq_reads[j], scl.cell_umis[j].size());
-  }
-  */
-
-  // compute Bayes Factor for every pair of droplets sequentially
-  std::vector<int32_t> clusts;
-  int32_t nclusts = 0;
 
   // First, calculate the heterozygosity of each droplet to determine which droplet is
   // likely potentially doublets
-
   htsFile* wmix = hts_open((outPrefix+".lmix").c_str(),"w");
   hprintf(wmix, "INT_ID\tBARCODE\tNSNPs\tNREADs\tDBL.LLK\tSNG.LLK\tLOG.BF\tBFpSNP\n");
     
   for(int32_t i=0; i < scl.nbcs; ++i) {
-    int32_t si = drops_srted[i];
+    int32_t si = i; // drops_srted[i];
     if (i % 1000 == 0 )
       notice("Processing doublet likelihoods for %d droplets..", i+1);
 
@@ -201,28 +220,49 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       llk2 += log(lk2);
     }
 
+    scl.cell_scores[si] = llk2 - llk0;  // score of being singlet
+
     hprintf(wmix,"%d\t%s\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, scl.bcs[si].c_str(), nSNPs, nReads, llk0, llk2, llk0-llk2, (llk0-llk2)/nSNPs);
   }
   hts_close(wmix);
 
+  // sort droplets by singlet scores
+  std::vector<int32_t> drops_srted(scl.nbcs);
+  for(int32_t i=0; i < scl.nbcs; ++i) {
+    drops_srted[i] = i;
+  }  
+  sc_drop_comp_t sdc(&scl);
+  std::sort( drops_srted.begin(), drops_srted.end(), sdc );  
+
   // store pairwise distances
   std::vector< std::vector<dropD> > dropDs;
 
-  //louvain lv(scl.nbcs);
-
-  htsFile* wf = hts_open((outPrefix+".ldist").c_str(),"w");
+  htsFile* wf = hts_open((outPrefix+".ldist.gz").c_str(),"wz");
+  //htsFile* wm = hts_open((outPrefix+".dist_mat.gz").c_str(),"wz");  
   hprintf(wf, "ID1\tID2\tNSNP\tREAD1\tREAD2\tREADMIN\tLLK0\tLLK1\tLLK2\tLDIFF\tDIFF.SNP\n");
+  
+  //hprintf(wm,"%d\n", scl.nbcs);
+  //for(int32_t i=0; i < scl.nbcs; ++i) {
+  //  if ( i+1 == scl.nbcs ) hprintf(wm,"%d\n",drops_srted[i]);
+  //  else hprintf(wm,"%d\t",drops_srted[i]);
+  //}
 
+  std::vector<double> votes(nSamples);
+  std::vector<int32_t> clusts(nSamples,0);
   for(int32_t i=0; i < scl.nbcs; ++i) {
     int32_t si = drops_srted[i];
-    bool clique = true;
-    int32_t clust = -1;
+    //bool clique = true;
+    //int32_t clust = -1;
 
     dropDs.resize(i+1);
 
     if (i % 50 == 0 )
       notice("Processing %d droplets..", i+1);
-    
+
+    for(int32_t j=0; j < nSamples; ++j) {
+      votes[j] = rand()/(RAND_MAX+1.)/1000.;
+    }
+
     for(int32_t j=0; j < i; ++j) {
       int32_t sj = drops_srted[j];
 
@@ -283,17 +323,97 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       
       dropDs[i].push_back( dropD(nInformativeSNPs, llk0, llk1, llk2) );
 
-      hprintf(wf, "%d\t%d\t%d\t%d\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, sj, nInformativeSNPs, nInformativeRead1, nInformativeRead2, nInformativeReadMin, llk0, llk1, llk2, llk2-llk0, (llk2-llk0)/nInformativeSNPs);      
+      hprintf(wf, "%d\t%d\t%d\t%d\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, sj, nInformativeSNPs, nInformativeRead1, nInformativeRead2, nInformativeReadMin, llk0, llk1, llk2, llk2-llk0, (llk2-llk0)/(nInformativeSNPs+1.0));
+
+      if ( llk0-llk2 > bfThres ) {
+	votes[clusts[sj]] -= 1.0;
+      }
+      else if ( llk2-llk0 > bfThres ) {
+	votes[clusts[sj]] += 1.0;	
+      }
 
       //if ( llk2 > llk0 + 2 ) {
       //lv.add_edge(si, sj, 1.0);
       //}
+
+      //if ( j + 1 == i ) hprintf(wm, "%.5lf\n", (llk2-llk0)/(nInformativeSNPs+1.0));
+      //else hprintf(wm, "%.5lf\t", (llk2-llk0)/(nInformativeSNPs+1.0));
     }
+
+    int32_t elected = 0;
+    double maxvote = votes[0];
+    for(int32_t j=1; j < nSamples; ++j) {
+      if ( maxvote < votes[j] ) {
+	elected = j;
+	maxvote = votes[j];
+      }
+    }
+    clusts[si] = elected;
   }
+
+  hts_close(wf);
+  //hts_close(wm);
 
   notice("Finished calculating pairwise distance between the droplets..");
 
-  notice("Finding clusters...");
+  for(int32_t iter=0; iter < 10; ++iter) {
+    std::vector<int32_t> orand;
+    for(int32_t i=0; i < scl.nbcs; ++i) {
+      orand.push_back(i);
+    }
+    std::random_shuffle( orand.begin(), orand.end() );
+
+    int32_t changed = 0;
+    std::vector<int32_t> ccounts(nSamples,0);
+
+    for(int32_t i=0; i < scl.nbcs; ++i) {
+      int32_t ri = orand[i];
+
+      for(int32_t j=0; j < nSamples; ++j) {
+	votes[j] = rand()/(RAND_MAX+1.)/1000.;
+      }
+      
+      for(int32_t j=0; j < scl.nbcs; ++j) {
+	if ( j != ri ) {
+	  double bf = ( j < ri ) ? ( dropDs[ri][j].llk2 - dropDs[ri][j].llk0 ) : ( dropDs[j][ri].llk2 - dropDs[j][ri].llk0 );
+	  if ( bf > bfThres ) { ++votes[clusts[j]]; }
+	  else if ( bf < 0-bfThres ) { --votes[clusts[j]]; }
+	}
+      }
+
+      int32_t elected = 0;
+      double maxvote = votes[0];
+      for(int32_t j=1; j < nSamples; ++j) {
+	if ( maxvote < votes[j] ) {
+	  elected = j;
+	  maxvote = votes[j];
+	}
+      }
+      if ( clusts[ri] != elected ) ++changed;
+      clusts[ri] = elected;
+      ++ccounts[elected];
+    }
+
+    std::string buf;
+    for(int32_t j=0; j < nSamples; ++j) 
+      catprintf(buf, " %d",ccounts[j]);
+    notice("Iteration %d, # changed = %d, cluster counts:%s",iter, changed, buf.c_str());
+  }
+
+  htsFile* wc0 = hts_open((outPrefix+".clust0.samples.gz").c_str(),"wz");
+  hprintf(wc0, "INT_ID\tBARCODE\tCLUST0\n");
+  for(int32_t i=0; i < scl.nbcs; ++i) {
+    hprintf(wc0, "%d\t%s\t%d\n", i, scl.bcs[i].c_str(), clusts[i]);
+  }
+  hts_close(wc0);
+
+  std::vector< std::map<int32_t,snpCellPileup> > samplePileup;
+
+  //htsFile* vc0 = hts_open((outPrefix+".clust0.vcf.gz").c_str(),"wz");
+  
+  //hts_close(vc0);
+
+  //notice("Finding clusters...");
 
   /*
   lv.make_cluster_pass(true);

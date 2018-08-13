@@ -27,7 +27,8 @@ int32_t sc_dropseq_lib_t::add_cell(const char* barcode) {
     cell_umis.resize( nbcs + 1 );
     cell_totl_reads.resize( nbcs + 1 );
     cell_pass_reads.resize( nbcs + 1 );
-    cell_uniq_reads.resize( nbcs + 1 );    
+    cell_uniq_reads.resize( nbcs + 1 );
+    cell_scores.resize(nbcs + 1);
     ++nbcs;
     
     return (nbcs-1);

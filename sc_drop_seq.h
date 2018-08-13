@@ -46,7 +46,8 @@ class sc_dropseq_lib_t {
   // Number of pass-filtered reads and unique reads
   std::vector<int32_t> cell_totl_reads;  
   std::vector<int32_t> cell_pass_reads;
-  std::vector<int32_t> cell_uniq_reads;  
+  std::vector<int32_t> cell_uniq_reads;
+  std::vector<double>  cell_scores;
   
   std::vector< std::map<int32_t,sc_snp_droplet_t*> > snp_umis;
   int32_t nbcs;

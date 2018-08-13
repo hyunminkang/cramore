@@ -38,3 +38,9 @@ autom4te.cache/*
 .deps/
 .deps/*
 *.Po
+
+test/
+test/*
+
+.DS_Store
+cramore
