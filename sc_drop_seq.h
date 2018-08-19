@@ -103,6 +103,6 @@ struct snp_droplet_pileup {
 
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls);
 double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, double alpha);
-double calculate_snp_droplet_pileup(sc_snp_droplet_t* ssd, snp_droplet_pileup& scp, double alpha); 
+double calculate_snp_droplet_pileup(sc_snp_droplet_t* ssd, snp_droplet_pileup* sdp, double alpha); 
 
 #endif
