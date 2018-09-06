@@ -512,7 +512,7 @@ void frequency_estimator::estimate_isaf_lrt() {
       p0[i] = isafMinimizer.point[i];
     llk0 = 0 - isafMinimizer.fmin;
 
-    notice("ndims = %d, p0[0] = %.5lg, p0[1] = %.5lg, p0[2] = %.5lg, p0[3] = %.5lg", ndims, p0[0], p0[1], p0[2], p0[3]);
+    //notice("ndims = %d, p0[0] = %.5lg, p0[1] = %.5lg, p0[2] = %.5lg, p0[3] = %.5lg", ndims, p0[0], p0[1], p0[2], p0[3]);
   }
 
   // Find MLE without assuming HWE  
@@ -539,7 +539,7 @@ void frequency_estimator::estimate_isaf_lrt() {
     theta = tanh(isafMinimizer.point[ndims+1]);
     llk1 = 0 - isafMinimizer.fmin;
 
-    notice("ndims = %d, p1[0] = %.5lg, p1[1] = %.5lg, p1[2] = %.5lg, p1[3] = %.5lg", ndims, p1[0], p1[1], p1[2], p1[3]);    
+    //notice("ndims = %d, p1[0] = %.5lg, p1[1] = %.5lg, p1[2] = %.5lg, p1[3] = %.5lg", ndims, p1[0], p1[1], p1[2], p1[3]);    
   }
 
 
