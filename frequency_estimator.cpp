@@ -75,16 +75,16 @@ bool frequency_estimator::set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr ) {
 	sprintf(buffer,"##INFO=<ID=HWE_SLP_P,Number=1,Type=Float,Description=\"Z-score of HWE test with pooled allele frequencyes\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
-      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "IBC_P" ) < 0 ) {      
-	sprintf(buffer,"##INFO=<ID=IBC_P,Number=1,Type=Float,Description=\"Inbreeding coefficient with pooled allele frequencies\">\n");
+      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "FIBC_P" ) < 0 ) {      
+	sprintf(buffer,"##INFO=<ID=FIBC_P,Number=1,Type=Float,Description=\"Inbreeding coefficient with pooled allele frequencies\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "HWE_SLP_I" ) < 0 ) {      
 	sprintf(buffer,"##INFO=<ID=HWE_SLP_I,Number=1,Type=Float,Description=\"Z-score of HWE test with individual-sepcific allele frequencyes\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
-      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "IBC_I" ) < 0 ) {
-	sprintf(buffer,"##INFO=<ID=IBC_I,Number=1,Type=Float,Description=\"Inbreeding coefficient with individual-sepcific allele frequencies\">\n");
+      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "FIBC_I" ) < 0 ) {
+	sprintf(buffer,"##INFO=<ID=FIBC_I,Number=1,Type=Float,Description=\"Inbreeding coefficient with individual-sepcific allele frequencies\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "MAX_IF" ) < 0 ) {
@@ -490,7 +490,8 @@ void frequency_estimator::estimate_isaf_lrt() {
   double llk0, llk1;
   std::vector<double> p0(ndims+1);
   std::vector<double> p1(ndims+1);  
-  
+
+  // Find MLE assuming HWE
   {
     assumeHWD = false;
     
@@ -505,12 +506,16 @@ void frequency_estimator::estimate_isaf_lrt() {
     isafMinimizer.Reset(ndims+1);
     isafMinimizer.point = startingPoint;
     isafMinimizer.Minimize(tol);
+    Evaluate(isafMinimizer.point);
 
     for(int i=0; i < ndims+1; ++i)
       p0[i] = isafMinimizer.point[i];
     llk0 = 0 - isafMinimizer.fmin;
+
+    notice("ndims = %d, p0[0] = %.5lg, p0[1] = %.5lg, p0[2] = %.5lg, p0[3] = %.5lg", ndims, p0[0], p0[1], p0[2], p0[3]);
   }
 
+  // Find MLE without assuming HWE  
   {
     assumeHWD = true;
     AmoebaMinimizer isafMinimizer;
@@ -526,12 +531,15 @@ void frequency_estimator::estimate_isaf_lrt() {
     isafMinimizer.Reset(ndims+2);
     isafMinimizer.point = startingPoint;
     isafMinimizer.Minimize(tol);
+    Evaluate(isafMinimizer.point);    
 
     for(int i=0; i < ndims+1; ++i)
       p1[i] = isafMinimizer.point[i];
     
     theta = tanh(isafMinimizer.point[ndims+1]);
-    llk1 = 0 - isafMinimizer.fmin;    
+    llk1 = 0 - isafMinimizer.fmin;
+
+    notice("ndims = %d, p1[0] = %.5lg, p1[1] = %.5lg, p1[2] = %.5lg, p1[3] = %.5lg", ndims, p1[0], p1[1], p1[2], p1[3]);    
   }
 
 

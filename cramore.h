@@ -9,6 +9,7 @@
 #include <string>
 #include <set>
 #include <ctime>
+#include <cmath>
 
 // Hyun's codes
 #include "params.h"

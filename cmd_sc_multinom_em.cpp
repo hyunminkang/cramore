@@ -516,7 +516,7 @@ int32_t cmdScMultinomEM(int32_t argc, char** argv) {
       }
 
       llk += (maxZ + log(sumZ));
-      if ( isnan(llk) ) {
+      if ( std::isnan(llk) ) {
 	notice("maxZ = %lg, sumZ = %lg, llk = %lg, z[0] = %lg", maxZ, sumZ, llk, z[0]);
 	abort();
       }

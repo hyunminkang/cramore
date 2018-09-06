@@ -28,7 +28,7 @@
 # in the Makefile to reflect your configuration choices.  If you don't run
 # configure, the main Makefile contains suitable conservative defaults.
 
-prefix       = /usr/local
+prefix       = /net/fantasia/home/hmkang/tools/cramore.master
 exec_prefix  = ${prefix}
 bindir       = ${exec_prefix}/bin
 libexecdir   = ${exec_prefix}/libexec

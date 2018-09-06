@@ -128,7 +128,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   while( tsv_plpf.read_line() > 0 ) {
     const char* pa = tsv_plpf.str_field_at(2);
     const char* pq = tsv_plpf.str_field_at(3);
-    int32_t l = (int32_t)strlen(pq);
+    int32_t l = (int32_t)strlen(pa);
     
     if ( (int32_t)strlen(pq) != l )
       error("Length are different between %s and %s", pa, pq);
