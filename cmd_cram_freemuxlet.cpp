@@ -46,7 +46,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   int32_t minCoveredSNPs = 0;
   int32_t nSamples = 0;
   double bfThres = 5.41;
-  bool verbose = false;
+  bool auxFiles = false;
 
   paramList pl;
 
@@ -60,7 +60,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     LONG_DOUBLE_PARAM("doublet-prior",&doublet_prior, "Prior of doublet")
     LONG_INT_PARAM("nsample",&nSamples,"Number of samples multiplexed together")
     LONG_DOUBLE_PARAM("bf-thres",&bfThres,"Bayes Factor Threshold used in the initial clustering")
-    LONG_PARAM("verbose",&verbose,"Turn on verbose output mode")
+    LONG_PARAM("aux-files", &auxFiles, "Turn on writing auxilary output files")
+    LONG_INT_PARAM("verbose", &globalVerbosityThreshold, "Turn on verbose mode with specific verbosity threshold. 0: fully verbose, 100 : no verbose messages")    
     
     LONG_PARAM_GROUP("Read filtering Options", NULL)
     LONG_INT_PARAM("cap-BQ", &capBQ, "Maximum base quality (higher BQ will be capped)")
@@ -91,56 +92,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   sc_dropseq_lib_t scl;
   //int32_t nAlpha = (int32_t)gridAlpha.size();
 
-  // Read droplet information from the mux-pileup output
-  notice("Reading barcode information from %s.cel.gz..", plpPrefix.c_str());
-  tsv_reader tsv_bcdf( (plpPrefix + ".cel.gz").c_str() );
-  while( tsv_bcdf.read_line() > 0 ) {
-    scl.add_cell(tsv_bcdf.str_field_at(1));
-  }
-
-  // Read SNP information from the mux-pileup output  
-  tsv_reader tsv_varf( (plpPrefix + ".var.gz").c_str() );
-
-  std::map<std::string, int32_t> chr2rid;
-  std::vector<std::string> chroms;
-  while( tsv_varf.read_line() > 0 ) {
-    const char* chr = tsv_varf.str_field_at(1);
-    if ( chr2rid.find(chr) == chr2rid.end() ) {
-      int32_t newrid = chr2rid.size();
-      chr2rid[chr] = newrid;
-      chroms.push_back(chr);
-    }
-    int32_t rid = chr2rid[chr];
-    int32_t pos = tsv_varf.int_field_at(2);
-    char    ref = tsv_varf.str_field_at(3)[0];
-    char    alt = tsv_varf.str_field_at(4)[0];
-    double  af  = tsv_varf.double_field_at(5);
-
-    if ( scl.add_snp(rid, pos, ref, alt, af, NULL) + 1 != tsv_varf.nlines )
-      error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, scl.nsnps-1);
-  }
-
-  // Read pileup information
-  char buf[255];
-  notice("Reading pileup information from %s.plp.gz..", plpPrefix.c_str());
-  tsv_reader tsv_plpf( (plpPrefix + ".plp.gz").c_str() );
-  int32_t numi = 0;
-  while( tsv_plpf.read_line() > 0 ) {
-    const char* pa = tsv_plpf.str_field_at(2);
-    const char* pq = tsv_plpf.str_field_at(3);
-    int32_t l = (int32_t)strlen(pq);
-    
-    if ( (int32_t)strlen(pq) != l )
-      error("Length are different between %s and %s", pa, pq);
-    
-    for(int32_t i=0; i < l; ++i) {
-      sprintf(buf, "%x", numi++);
-      ++scl.cell_totl_reads[tsv_plpf.int_field_at(0)];    	
-      scl.add_read( tsv_plpf.int_field_at(1), tsv_plpf.int_field_at(0), buf, (char)(pa[i]-(char)'0'), (char)(pq[i]-(char)33) ); 
-    }
-  }
-
-  notice("Finished reading pileup information from %s.plp.gz..", plpPrefix.c_str());  
+  scl.load_from_plp(plpPrefix.c_str());  
 
   struct sc_drop_comp_t {
     sc_dropseq_lib_t* pscl;
@@ -230,7 +182,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   std::vector< std::vector<dropD> > dropDs(scl.nbcs);
 
   htsFile* wdist = NULL;
-  if ( verbose ) {
+  if ( auxFiles ) {
     wdist = hts_open((outPrefix+".ldist.gz").c_str(),"wz");
     hprintf(wdist, "ID1\tID2\tNSNP\tREAD1\tREAD2\tREADMIN\tLLK0\tLLK2\tLDIFF\tDIFF.SNP\n");
   }
@@ -243,7 +195,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   for(int32_t v=0; v < scl.nsnps; ++v) {
     if ( !snp_cell_plps[v].empty() ) {
       if ( v % 10000 == 0 )
-	notice("Processing %d variants at %s:%d..", v, chroms[scl.snps[v].rid].c_str(), scl.snps[v].pos);
+	notice("Processing %d variants at %s:%d..", v, scl.rid2chr[scl.snps[v].rid].c_str(), scl.snps[v].pos);
       std::map<int32_t,snp_droplet_pileup*>::iterator it, jt;
       for(it = snp_cell_plps[v].begin(); it != snp_cell_plps[v].end(); ++it) {
 	double* glis = it->second->gls;
@@ -296,7 +248,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 
       const dropD& dd = ( si > sj ) ? dropDs[si][sj] : dropDs[sj][si];
       
-      if ( verbose ) {
+      if ( auxFiles ) {
 	hprintf(wdist, "%d\t%d\t%d\t%d\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, sj, dd.nsnps, dd.nread1, dd.nread2, dd.nread1 > dd.nread2 ? dd.nread2 : dd.nread1, dd.llk0, dd.llk2, dd.llk2-dd.llk0, (dd.llk2-dd.llk0)/(dd.nsnps+1e-6));
       }
 
@@ -322,7 +274,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     ++ccounts[elected];
   }
 
-  if ( verbose ) hts_close(wdist);
+  if ( auxFiles ) hts_close(wdist);
 
   notice("Finished calculating pairwise distance between the droplets..");
 
@@ -369,7 +321,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     notice("Iteration %d, # changed = %d, cluster counts:%s",iter, changed, buf.c_str());
   }
 
-  if ( verbose ) {
+  if ( auxFiles ) {
     htsFile* wc0 = hts_open((outPrefix+".clust0.samples.gz").c_str(),"wz");
     hprintf(wc0, "INT_ID\tBARCODE\tCLUST0\n");
     //std::vector< std::vector<int32_t> > iclusts(nSamples);
@@ -392,7 +344,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     }
   }
 
-  if ( verbose ) {
+  if ( auxFiles ) {
     htsFile* vc0 = hts_open((outPrefix+".clust0.vcf.gz").c_str(),"wz");
     hprintf(vc0,"##CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
     for(int32_t i=0; i < nSamples; ++i) hprintf(vc0, "\tCLUST%d", i);
@@ -400,7 +352,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     for(int32_t v=0; v < scl.nsnps; ++v) {
       if ( !snps_observed[v] ) continue;
       sc_snp_t& s = scl.snps[v];
-      hprintf(vc0,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",chroms[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
+      hprintf(vc0,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",scl.rid2chr[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
       for(int32_t i=0; i < nSamples; ++i) {
 	snp_droplet_pileup& sdp = clustPileup[i][v];
 	double maxGL = sdp.gls[0];
@@ -433,7 +385,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   std::vector<double> dblBestLLKs(scl.nbcs,-1e300);  
   std::vector<double> bestPPs(scl.nbcs,-1e300);
   std::vector<double> sngPPs(scl.nbcs,-1e300);
-  std::vector<double> sngOnlyPPs(scl.nbcs,-1e300);    
+  std::vector<double> sngOnlyPPs(scl.nbcs,-1e300);
+  std::vector<int32_t> types(scl.nbcs,-1);
       
   // calculate probabilities of singlets/doublets
   for(int32_t iter=0; iter < 10; ++iter) {
@@ -570,13 +523,27 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     for(int32_t i=0; i < scl.nbcs; ++i) {
       std::map<int32_t,snp_droplet_pileup*>::const_iterator it = cell_snp_plps[i].begin();
       while(it != cell_snp_plps[i].end()) {
-	if ( jClusts[i] == kClusts[i] ) {
+	if ( ( jClusts[i] == kClusts[i] ) && ( bestPPs[i] > 0.8 ) ) {
 	  clustPileup[jClusts[i]][it->first].merge(*it->second);
 	}
 	++it;
       }
-      if ( bestPPs[i] < 0.8 ) ++namb;
-      else if ( jClusts[i] == kClusts[i] ) ++nsingle;      
+
+      if ( ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) && ( jClusts[i] != kClusts[i] ) ) {
+	types[i] = 1; // doublet
+      }
+      else if ( sngBestLLKs[i] > sngNextLLKs[i] + 2 ) {
+	types[i] = 0; // singlet
+	++nsingle;
+      }
+      else {
+	types[i] = 2; // ambiguous
+	++namb;
+      }
+      
+      // old criteria
+      //if ( bestPPs[i] < 0.8 ) ++namb;
+      //else if ( jClusts[i] == kClusts[i] ) ++nsingle;      
     }
 
     notice("Refining per-cluster genotype likelihoods.... %d singlets, %d doublets, and %d ambiguous", nsingle, scl.nbcs-nsingle-namb, namb);    
@@ -590,7 +557,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   for(int32_t v=0; v < scl.nsnps; ++v) {
     if ( !snps_observed[v] ) continue;
     sc_snp_t& s = scl.snps[v];
-    hprintf(vc1,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",chroms[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
+    hprintf(vc1,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",scl.rid2chr[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
     for(int32_t i=0; i < nSamples; ++i) {
       snp_droplet_pileup& sdp = clustPileup[i][v];
       double maxGL = sdp.gls[0];
@@ -609,28 +576,9 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   htsFile* wc1 = hts_open((outPrefix+".clust1.samples.gz").c_str(),"wz");
   hprintf(wc1, "INT_ID\tBARCODE\tNUM.SNPS\tNUM.READS\tDROPLET.TYPE\tBEST.GUESS\tBEST.LLK\tNEXT.GUESS\tNEXT.LLK\tDIFF.LLK.BEST.NEXT\tBEST.POSTERIOR\tSNG.POSTERIOR\tSNG.BEST.GUESS\tSNG.BEST.LLK\tSNG.NEXT.GUESS\tSNG.NEXT.LLK\tSNG.ONLY.POSTERIOR\tDBL.BEST.GUESS\tDBL.BEST.LLK\tDIFF.LLK.SNG.DBL\n");
   for(int32_t i=0; i < scl.nbcs; ++i) {
-    hprintf(wc1, "%d\t%s\t%d\t%d\t%s\t%d,%d\t%.2lf\t%d,%d\t%.2lf\t%.2lf\t%.5lf\t%.2lg\t%d\t%.2lf\t%d\t%.2lf\t%.5lf\t%d,%d\t%.2lf\t%.2lf\n", i, scl.bcs[i].c_str(), nSNPs[i], nReads[i], bestPPs[i] < 0.8 ? "AMB" : (jClusts[i] == kClusts[i] ? "SNG" : "DBL"), jClusts[i], kClusts[i], bestLLKs[i], jNexts[i], kNexts[i], nextLLKs[i], bestLLKs[i]-nextLLKs[i], bestPPs[i], sngPPs[i], sClusts[i], sngBestLLKs[i], sNexts[i], sngNextLLKs[i], sngOnlyPPs[i], dBest1s[i], dBest2s[i], dblBestLLKs[i], sngBestLLKs[i]-dblBestLLKs[i]);
+    hprintf(wc1, "%d\t%s\t%d\t%d\t%s\t%d,%d\t%.2lf\t%d,%d\t%.2lf\t%.2lf\t%.5lf\t%.2lg\t%d\t%.2lf\t%d\t%.2lf\t%.5lf\t%d,%d\t%.2lf\t%.2lf\n", i, scl.bcs[i].c_str(), nSNPs[i], nReads[i], (types[i] == 2) ? "AMB" : ((types[i] == 0) ? "SNG" : "DBL"), jClusts[i], kClusts[i], bestLLKs[i], jNexts[i], kNexts[i], nextLLKs[i], bestLLKs[i]-nextLLKs[i], bestPPs[i], sngPPs[i], sClusts[i], sngBestLLKs[i], sNexts[i], sngNextLLKs[i], sngOnlyPPs[i], dBest1s[i], dBest2s[i], dblBestLLKs[i], sngBestLLKs[i]-dblBestLLKs[i]);
   }
   hts_close(wc1);  
-
-  //notice("Finding clusters...");
-
-  /*
-  lv.make_cluster_pass(true);
-  lv.print_summary();
-
-  // print out cluster assignments
-  std::vector<int32_t> iclust(scl.nbcs, -1);
-  std::vector<lnode*>& nodes = lv.root->children;
-  for(int32_t i=0; i < (int32_t)nodes.size(); ++i) {
-    for(int32_t j=0; j < (int32_t)nodes[i]->children.size(); ++j) {
-      iclust[nodes[i]->children[j]->id] = i;
-    }
-  }
-  for(int32_t i=0; i < (int32_t)iclust.size(); ++i) {
-    printf("%s\t%d\n", scl.bcs[i].c_str(), iclust[i]);
-  }
-  */  
 
   return 0;
 }

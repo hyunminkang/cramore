@@ -85,6 +85,166 @@ bool sc_dropseq_lib_t::add_read(int32_t snpid, int32_t cellid, const char* umi, 
   return ret;
 }
 
+
+int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr, const char* field, double genoError,bool loadUMI) {
+  if ( loadUMI == true )
+    error("[E:%s] loadUMI = true option is not implemented yet", __PRETTY_FUNCTION__);
+
+  int32_t nv = 0;
+  if ( pvr != NULL ) { // variant sites are provided..
+    if ( pvr->read() )
+      error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, pvr->bcf_file_name.c_str());
+
+    if ( pvr->parse_posteriors(pvr->cdr.hdr, pvr->cursor(), field, genoError) )
+      error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,pvr->cursor()->rid), pvr->cursor()->pos+1);
+
+    nv = pvr->get_nsamples();    
+  }
+
+  verbose(70, "Loading pileup information with prefix %s", plpPrefix);
+  verbose(50, "Reading barcode information from %s.cel.gz..", plpPrefix);  
+  char fname[65535];
+
+  // reading the droplet information first..
+  sprintf(fname, "%s.cel.gz", plpPrefix);
+  tsv_reader tsv_bcdf(fname);
+
+  std::vector<int32_t> tmp_cell_totl_reads;
+  std::vector<int32_t> tmp_cell_uniq_reads;
+  std::vector<int32_t> tmp_cell_num_snps;    
+  
+  if ( tsv_bcdf.read_line() > 0 ) {
+    if ( ( tsv_bcdf.nfields != 5 ) ||
+	 ( strcmp("#DROPLET_ID",tsv_bcdf.str_field_at(0)) != 0 ) ||
+	 ( strcmp("BARCODE",tsv_bcdf.str_field_at(1)) != 0 ) ||
+	 ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
+	 ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
+	 ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(3)) != 0 ) ) 
+      error("THe header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix);
+  }
+  else error("Cannot read the first line of %s.cel.gz", plpPrefix);
+
+  while( tsv_bcdf.read_line() > 0 ) {
+    int32_t new_id = add_cell(tsv_bcdf.str_field_at(1));
+    if ( new_id != tsv_bcdf.int_field_at(0) )
+      error("[E:%s] Observed DROPLET_ID %d is different from expected DROPLET_ID. Did you modify the digital pileup files by yourself?", __PRETTY_FUNCTION__, tsv_bcdf.int_field_at(0), new_id);
+    tmp_cell_totl_reads.push_back(tsv_bcdf.int_field_at(2));
+    tmp_cell_uniq_reads.push_back(tsv_bcdf.int_field_at(3));
+    tmp_cell_num_snps.push_back(tsv_bcdf.int_field_at(4));
+  }
+  verbose(50, "Finished loading %d droplets..", nbcs);
+
+  // reading the variant information next..
+  verbose(50, "Reading variant information from %s.var.gz..", plpPrefix);  
+  sprintf(fname, "%s.var.gz", plpPrefix);
+  tsv_reader tsv_varf(fname);  
+  if ( tsv_varf.read_line() > 0 ) {
+    if ( ( tsv_varf.nfields != 5 ) ||
+	 ( strcmp("#SNP_ID",tsv_varf.str_field_at(0)) != 0 ) ||
+	 ( strcmp("CHROM",tsv_varf.str_field_at(1)) != 0 ) ||
+	 ( strcmp("POS",tsv_varf.str_field_at(2)) != 0 ) ||
+	 ( strcmp("REF",tsv_varf.str_field_at(3)) != 0 ) ||
+	 ( strcmp("ALT",tsv_varf.str_field_at(4)) != 0 ) ||	   
+	 ( strcmp("AF",tsv_varf.str_field_at(5)) != 0 ) )
+      error("THe header line of %s.cel.gz is malformed or outdated. Expecting #SNP_ID CHROM POS REF ALT AF", plpPrefix);
+  }
+  else error("Cannot read the first line of %s.var.gz", plpPrefix);
+
+  int nrd = 0;  
+  while( tsv_varf.read_line() > 0 ) {
+    const char* chr = tsv_varf.str_field_at(1);
+    if ( chr2rid.find(chr) == chr2rid.end() ) {
+      int32_t newrid = chr2rid.size();
+      chr2rid[chr] = newrid;
+      rid2chr.push_back(chr);
+    }
+    int32_t rid = chr2rid[chr];
+    int32_t pos = tsv_varf.int_field_at(2);
+    char    ref = tsv_varf.str_field_at(3)[0];
+    char    alt = tsv_varf.str_field_at(4)[0];
+    double  af  = tsv_varf.double_field_at(5);
+
+    if ( pvr == NULL ) { // no VCFs were provided as argument
+      if ( add_snp(rid, pos, ref, alt, af, NULL) + 1 != tsv_varf.nlines )
+	error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, nsnps-1);
+    }
+    else {
+      // find the variant from VCF. The VCF must be identical to what was provided before
+      bcf1_t* v = pvr->cursor();
+      while( ( !pvr->eof ) &&
+	     ( ( v->rid != rid ) ||
+	       ( v->pos + 1 != pos ) ||
+	       ( v->d.allele[0][0] != ref ) ||
+	       ( v->d.allele[1][0] != alt ) ) ) {
+	if ( v->rid > rid )
+	  error("Could not find variant %s:%d:%c:%c from VCF file", tsv_varf.str_field_at(0), pos, ref, alt);	  
+	if ( rand() % 10000 == 0 )
+	  verbose(50, "Reading variant info %s:%d:%c:%c at %s:%d:%c:%c", tsv_varf.str_field_at(0), pos, ref, alt, bcf_hdr_id2name(pvr->cdr.hdr, v->rid), v->pos+1, v->d.allele[0][0], v->d.allele[1][0] );
+	pvr->read();
+	v = pvr->cursor();
+	++nrd;
+      }
+
+      if ( pvr->eof ) {
+	error("[E:%s] Cannot find variant at %s:%d:%c:%c nrd = %d", tsv_varf.str_field_at(0), pos, ref, alt, nrd);
+      }
+
+      if ( pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
+	error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,v->rid), v->pos+1);
+	  
+      double* gps = new double[nv*3];
+      for(int32_t i=0; i < nv * 3; ++i) {
+	gps[i] = pvr->get_posterior_at(i);
+      }
+      if ( add_snp(rid, pos, ref, alt, af, gps) + 1 != tsv_varf.nlines )
+	error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, nsnps-1);      
+    }
+  }
+  verbose(50, "Finished loading %d variants..", nsnps);  
+
+  // reading pileup information finally...
+  verbose(50, "Reading pileup information from %s.plp.gz..", plpPrefix);  
+  sprintf(fname, "%s.plp.gz", plpPrefix);
+  tsv_reader tsv_plpf(fname);
+  if ( tsv_plpf.read_line() > 0 ) {
+    if ( ( tsv_plpf.nfields != 4 ) ||
+	 ( strcmp("#DROPLET_ID",tsv_plpf.str_field_at(0)) != 0 ) ||
+	 ( strcmp("SNP_ID",tsv_plpf.str_field_at(1)) != 0 ) ||
+	 ( strcmp("ALLELES",tsv_plpf.str_field_at(2)) != 0 ) ||
+	 ( strcmp("BASEQS",tsv_plpf.str_field_at(3)) != 0 ) )
+      error("THe header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID SNP_ID ALLELES BASEQS", plpPrefix);
+  }
+  else error("Cannot read the first line of %s.plp.gz", plpPrefix);      
+  
+  int32_t numi = 0;
+  char buf[255];
+  while( tsv_plpf.read_line() > 0 ) {
+    const char* pa = tsv_plpf.str_field_at(2);
+    const char* pq = tsv_plpf.str_field_at(3);
+    int32_t l = (int32_t)strlen(pq);
+    
+    if ( (int32_t)strlen(pq) != l )
+      error("Length are different between %s and %s", pa, pq);
+    
+    for(int32_t i=0; i < l; ++i) {
+      sprintf(buf, "%x", numi++);
+      ++cell_totl_reads[tsv_plpf.int_field_at(0)];    	
+      add_read( tsv_plpf.int_field_at(1), tsv_plpf.int_field_at(0), buf, (char)(pa[i]-(char)'0'), (char)(pq[i]-(char)33) ); 
+    }
+  }
+  verbose(50, "Finished loading %d UMIs in total..", numi);
+
+  // sanity check on the observed counts
+  for(int32_t i=0; i < nbcs; ++i) {
+    if ( ( cell_uniq_reads[i] == tmp_cell_uniq_reads[i] ) &&
+	 ( tmp_cell_num_snps[i] == (int32_t)cell_umis[i].size() ) ) {
+      cell_totl_reads[i] = tmp_cell_totl_reads[i]; // overwrite
+    }
+  }
+
+  return numi;
+}
+
 double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, double alpha) {
   //double logdenom = 0;
   double tmp;

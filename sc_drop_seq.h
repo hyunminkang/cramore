@@ -8,6 +8,8 @@
 #include <stdint.h>
 
 #include "Error.h"
+#include "bcf_filtered_reader.h"
+
 
 #define MIN_NORM_GL 1e-6
 
@@ -37,6 +39,9 @@ class sc_snp_t {
 class sc_dropseq_lib_t {
  public:
   // vector containing SNP & genotype info, index is snp_id
+  std::map<std::string, int32_t> chr2rid;
+  std::vector<std::string>       rid2chr;
+  
   std::vector<sc_snp_t> snps;
 
   // mapper between barcode -> bcd_id  
@@ -58,6 +63,8 @@ class sc_dropseq_lib_t {
   int32_t add_snp(int32_t _rid, int32_t _pos, char _ref, char _alt, double _af, double* _gps);
   int32_t add_cell(const char* barcode);
   bool add_read(int32_t snpid, int32_t cellid, const char* umi, char allele, char qual);
+
+  int32_t load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr = NULL, const char* field = "GP", double genoError = 0.1, bool loadUMI = false);
 
  sc_dropseq_lib_t() : nbcs(0), nsnps(0) {}
 };

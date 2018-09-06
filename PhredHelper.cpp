@@ -17,7 +17,7 @@
 
 #include "PhredHelper.h"
 
-#include <math.h>
+#include <cmath>
 
 phredConverter phredConv;
 

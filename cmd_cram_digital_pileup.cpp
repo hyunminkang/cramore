@@ -417,6 +417,7 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
 
   notice("Writing cell information");
   std::vector<std::string> v_bcs(scl.bc_map.size());
+  hprintf(wC, "#DROPLET_ID\tBARCODE\tNUM.READ\tNUM.UMI\tNUM.SNP\n");
   for(std::map<std::string,int32_t>::iterator it = scl.bc_map.begin(); it != scl.bc_map.end(); ++it) {
     if ( !v_bcs[it->second].empty() )
       error("Duplicate position for barcode %s at %d", it->first.c_str(), it->second);
@@ -424,7 +425,7 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
     //hprintf(wC, "%s\t%d\n", it->first.c_str(), it->second);
   }
   for(int32_t i=0; i < (int32_t)v_bcs.size(); ++i) {
-    hprintf(wC, "%d\t%s\n", i, v_bcs[i].c_str());
+    hprintf(wC, "%d\t%s\t%d\t%d\t%u\n", i, v_bcs[i].c_str(), scl.cell_totl_reads[i], scl.cell_uniq_reads[i], scl.cell_umis[i].size());
   }
   v_bcs.clear();
   notice("Finished writing cell information");
@@ -460,6 +461,8 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
   
   //double tmp;
   //for(i=0, k=0; i < scl.nsnps; ++i) {
+  hprintf(wV, "#SNP_ID\tCHROM\tPOS\tREF\tALT\tAF\n");
+  hprintf(wP, "#DROPLET_ID\tSNP_ID\tALLELES\tBASEQS\n");  
   for(i=0; i < scl.nsnps; ++i) {    
     hprintf(wV, "%d\t%s\t%d\t%c\t%c\t%.5lf\n", i, rchroms[scl.snps[i].rid].c_str(), scl.snps[i].pos, scl.snps[i].ref, scl.snps[i].alt, scl.snps[i].af); //0.5*gp0s[i*3+1] + gp0s[i*3+2]);
     

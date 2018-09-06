@@ -51,8 +51,8 @@ typedef struct {
 } filter_read_params_t;
 
 static bool filter_read(bam_hdr_t* h, bam1_t *s, filter_read_params_t* param) {
-  khiter_t k;
-  int32_t ret;
+  //khiter_t k;
+  //int32_t ret;
   
   if(bam_get_flag(s) & param->read_exclude_flag) {
     //1. unmapped
