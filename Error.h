@@ -33,7 +33,10 @@ void error(const char * msg, ...);
 void warning(const char * msg, ...);
 void numerror(const char * msg, ...);
 void notice(const char * msg, ...);
+void verbose(int32_t priority, const char * msg, ...);
 void catprintf(std::string &s, const char * msg, ...);
+
+extern int32_t globalVerbosityThreshold;
 
 // #ifdef __cplusplus
 //   };

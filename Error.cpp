@@ -24,6 +24,8 @@
 #include <ctime>
 #include <stdarg.h>
 
+int32_t globalVerbosityThreshold = 100;
+
 void error(const char * msg, ...)
 {
   va_list  ap;
@@ -81,6 +83,25 @@ void notice(const char * msg, ...) {
   fprintf(stderr,"NOTICE [%s] - ", buff);
   vfprintf(stderr, msg, ap);
   fprintf(stderr,"\n");
+
+  va_end(ap);
+}
+
+void verbose(int32_t priority, const char * msg, ...) {
+  va_list ap;
+  va_start(ap, msg);
+
+  if ( globalVerbosityThreshold < priority ) {
+    time_t current_time;
+    char buff[255];
+    current_time = time(NULL);
+
+    strftime(buff, 120, "%Y/%m/%d %H:%M:%S", localtime(&current_time));
+
+    fprintf(stderr,"VERBOSE_MESSAGE_%d [%s] - ", priority, buff);
+    vfprintf(stderr, msg, ap);
+    fprintf(stderr,"\n");
+  }
 
   va_end(ap);
 }
