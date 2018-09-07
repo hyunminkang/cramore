@@ -92,56 +92,6 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   sc_dropseq_lib_t scl;
   //int32_t nAlpha = (int32_t)gridAlpha.size();
 
-  // Read droplet information from the mux-pileup output
-  notice("Reading barcode information from %s.cel.gz..", plpPrefix.c_str());
-  tsv_reader tsv_bcdf( (plpPrefix + ".cel.gz").c_str() );
-  while( tsv_bcdf.read_line() > 0 ) {
-    scl.add_cell(tsv_bcdf.str_field_at(1));
-  }
-
-  // Read SNP information from the mux-pileup output  
-  tsv_reader tsv_varf( (plpPrefix + ".var.gz").c_str() );
-
-  std::map<std::string, int32_t> chr2rid;
-  std::vector<std::string> chroms;
-  while( tsv_varf.read_line() > 0 ) {
-    const char* chr = tsv_varf.str_field_at(1);
-    if ( chr2rid.find(chr) == chr2rid.end() ) {
-      int32_t newrid = chr2rid.size();
-      chr2rid[chr] = newrid;
-      chroms.push_back(chr);
-    }
-    int32_t rid = chr2rid[chr];
-    int32_t pos = tsv_varf.int_field_at(2);
-    char    ref = tsv_varf.str_field_at(3)[0];
-    char    alt = tsv_varf.str_field_at(4)[0];
-    double  af  = tsv_varf.double_field_at(5);
-
-    if ( scl.add_snp(rid, pos, ref, alt, af, NULL) + 1 != tsv_varf.nlines )
-      error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, scl.nsnps-1);
-  }
-
-  // Read pileup information
-  char buf[255];
-  notice("Reading pileup information from %s.plp.gz..", plpPrefix.c_str());
-  tsv_reader tsv_plpf( (plpPrefix + ".plp.gz").c_str() );
-  int32_t numi = 0;
-  while( tsv_plpf.read_line() > 0 ) {
-    const char* pa = tsv_plpf.str_field_at(2);
-    const char* pq = tsv_plpf.str_field_at(3);
-    int32_t l = (int32_t)strlen(pa);
-    
-    if ( (int32_t)strlen(pq) != l )
-      error("Length are different between %s and %s", pa, pq);
-    
-    for(int32_t i=0; i < l; ++i) {
-      sprintf(buf, "%x", numi++);
-      ++scl.cell_totl_reads[tsv_plpf.int_field_at(0)];    	
-      scl.add_read( tsv_plpf.int_field_at(1), tsv_plpf.int_field_at(0), buf, (char)(pa[i]-(char)'0'), (char)(pq[i]-(char)33) ); 
-    }
-  }
-
-  notice("Finished reading pileup information from %s.plp.gz..", plpPrefix.c_str());  
   scl.load_from_plp(plpPrefix.c_str());  
 
   struct sc_drop_comp_t {
