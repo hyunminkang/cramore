@@ -92,10 +92,10 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 
   int32_t nv = 0;
   if ( pvr != NULL ) { // variant sites are provided..
-    if ( pvr->read() )
+    if ( pvr->read() == NULL )
       error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, pvr->bcf_file_name.c_str());
 
-    if ( pvr->parse_posteriors(pvr->cdr.hdr, pvr->cursor(), field, genoError) )
+    if ( ! pvr->parse_posteriors(pvr->cdr.hdr, pvr->cursor(), field, genoError) )
       error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,pvr->cursor()->rid), pvr->cursor()->pos+1);
 
     nv = pvr->get_nsamples();    
@@ -119,7 +119,7 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	 ( strcmp("BARCODE",tsv_bcdf.str_field_at(1)) != 0 ) ||
 	 ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
 	 ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
-	 ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(3)) != 0 ) ) 
+	 ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(4)) != 0 ) ) 
       error("THe header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix);
   }
   else error("Cannot read the first line of %s.cel.gz", plpPrefix);
@@ -139,14 +139,14 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
   sprintf(fname, "%s.var.gz", plpPrefix);
   tsv_reader tsv_varf(fname);  
   if ( tsv_varf.read_line() > 0 ) {
-    if ( ( tsv_varf.nfields != 5 ) ||
+    if ( ( tsv_varf.nfields != 6 ) ||
 	 ( strcmp("#SNP_ID",tsv_varf.str_field_at(0)) != 0 ) ||
 	 ( strcmp("CHROM",tsv_varf.str_field_at(1)) != 0 ) ||
 	 ( strcmp("POS",tsv_varf.str_field_at(2)) != 0 ) ||
 	 ( strcmp("REF",tsv_varf.str_field_at(3)) != 0 ) ||
 	 ( strcmp("ALT",tsv_varf.str_field_at(4)) != 0 ) ||	   
 	 ( strcmp("AF",tsv_varf.str_field_at(5)) != 0 ) )
-      error("THe header line of %s.cel.gz is malformed or outdated. Expecting #SNP_ID CHROM POS REF ALT AF", plpPrefix);
+      error("THe header line of %s.var.gz is malformed or outdated. Expecting #SNP_ID CHROM POS REF ALT AF", plpPrefix);
   }
   else error("Cannot read the first line of %s.var.gz", plpPrefix);
 
@@ -165,8 +165,8 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
     double  af  = tsv_varf.double_field_at(5);
 
     if ( pvr == NULL ) { // no VCFs were provided as argument
-      if ( add_snp(rid, pos, ref, alt, af, NULL) + 1 != tsv_varf.nlines )
-	error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, nsnps-1);
+      if ( add_snp(rid, pos, ref, alt, af, NULL) + 2 != tsv_varf.nlines )
+	error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
     }
     else {
       // find the variant from VCF. The VCF must be identical to what was provided before
@@ -189,15 +189,15 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	error("[E:%s] Cannot find variant at %s:%d:%c:%c nrd = %d", tsv_varf.str_field_at(0), pos, ref, alt, nrd);
       }
 
-      if ( pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
+      if ( ! pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
 	error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,v->rid), v->pos+1);
 	  
       double* gps = new double[nv*3];
       for(int32_t i=0; i < nv * 3; ++i) {
 	gps[i] = pvr->get_posterior_at(i);
       }
-      if ( add_snp(rid, pos, ref, alt, af, gps) + 1 != tsv_varf.nlines )
-	error("Expected SNP nID = %d but observed %s", tsv_varf.nlines-1, nsnps-1);      
+      if ( add_snp(rid, pos, ref, alt, af, gps) + 2 != tsv_varf.nlines )
+	error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);      
     }
   }
   verbose(50, "Finished loading %d variants..", nsnps);  
