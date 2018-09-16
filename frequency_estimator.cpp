@@ -98,6 +98,10 @@ bool frequency_estimator::set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr ) {
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "BETA_IF" ) < 0 ) {      
 	sprintf(buffer,"##INFO=<ID=BETA_IF,Number=%d,Type=Float,Description=\"Coefficients for intercept and each eigenvector to obtain ISAF\">\n", ndims);
 	bcf_hdr_append(wdr, buffer);
+      }      
+      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "LLK0" ) < 0 ) {      
+	sprintf(buffer,"##INFO=<ID=LLK0,Number=1,Type=Float,Description=\"Null likelihood - for debug purpose\">\n");
+	bcf_hdr_append(wdr, buffer);
       }
     }
     if ( ( !skipIf ) && ( !siteOnly ) ) {
@@ -304,7 +308,7 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
 	estimate_isaf_simplex();
       else
 	estimate_isaf_em();
-        
+
       sum1 = l0*(1.-ifs[i])*(1.-ifs[i]) + 2*l1*(1.-ifs[i])*ifs[i] + l2*ifs[i]*ifs[i] + 1e-100;
       ph1 = 2*l1*(1.-ifs[i])*ifs[i];
       obsH1 += (ph1/sum1);
@@ -322,6 +326,13 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
     hwe1z = sumU1/sqrt(sqU1);
     ibc1 = 1.0 - (obsH1+1)/(expH1+1);
   }
+
+  // temporary: calculate llk_null
+  Vector v(ndims+1);
+  v[0] = pooled_af * 2.0;
+  for(int32_t j=0; j < ndims; ++j)
+    v[j+1] = betas[j];
+  llknull = 0 - Evaluate(v);
 
   return true;
 }
@@ -473,6 +484,9 @@ void frequency_estimator::estimate_isaf_simplex() {
   isafMinimizer.Reset(ndims+1);
   isafMinimizer.point = startingPoint;
   isafMinimizer.Minimize(tol);
+  Evaluate(isafMinimizer.point);          
+
+  llknull = 0 - isafMinimizer.fmin;
 
   //score_test_hwe(true, emaf);
 
@@ -506,11 +520,11 @@ void frequency_estimator::estimate_isaf_lrt() {
     isafMinimizer.Reset(ndims+1);
     isafMinimizer.point = startingPoint;
     isafMinimizer.Minimize(tol);
-    Evaluate(isafMinimizer.point);
+    Evaluate(isafMinimizer.point);        
 
     for(int i=0; i < ndims+1; ++i)
       p0[i] = isafMinimizer.point[i];
-    llk0 = 0 - isafMinimizer.fmin;
+    llknull = llk0 = 0 - isafMinimizer.fmin;
 
     //notice("ndims = %d, p0[0] = %.5lg, p0[1] = %.5lg, p0[2] = %.5lg, p0[3] = %.5lg", ndims, p0[0], p0[1], p0[2], p0[3]);
   }
@@ -701,6 +715,7 @@ bool frequency_estimator::update_variant() {
     bcf_update_info_float(wdr, iv, "HWE_SLP_I", &hweslp1, 1);
     bcf_update_info_float(wdr, iv, "MAX_IF", &max_if, 1);
     bcf_update_info_float(wdr, iv, "MIN_IF", &min_if, 1);
+    bcf_update_info_float(wdr, iv, "LLK0", &llknull, 1);    
     bcf_update_info_float(wdr, iv, "BETA_IF", betas, ndims);
   }
   if ( ( !skipIf ) && ( !siteOnly ) ) {

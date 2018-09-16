@@ -38,6 +38,7 @@ class frequency_estimator : public VectorFunc {
   float hwe1z;
   float ibc0;
   float ibc1;
+  float llknull;
 
   int32_t* pls;
   int32_t n_pls;

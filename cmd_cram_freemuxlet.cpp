@@ -370,22 +370,27 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   }
 
 
-  std::vector<int32_t> jClusts(scl.nbcs,-1);
-  std::vector<int32_t> kClusts(scl.nbcs,-1);
+  std::vector<int32_t> jBests(scl.nbcs,-1);
+  std::vector<int32_t> kBests(scl.nbcs,-1);
   std::vector<int32_t> jNexts(scl.nbcs,-1);
   std::vector<int32_t> kNexts(scl.nbcs,-1);  
-  std::vector<int32_t> sClusts(scl.nbcs,-1);
-  std::vector<int32_t> sNexts(scl.nbcs,-1);    
   std::vector<double> bestLLKs(scl.nbcs,-1e300);
   std::vector<double> nextLLKs(scl.nbcs,-1e300);
   std::vector<double> sngBestLLKs(scl.nbcs,-1e300);
   std::vector<double> sngNextLLKs(scl.nbcs,-1e300);
+  std::vector<int32_t> sBests(scl.nbcs,-1);
+  std::vector<int32_t> sNexts(scl.nbcs,-1);    
   std::vector<int32_t> dBest1s(scl.nbcs,-1);
-  std::vector<int32_t> dBest2s(scl.nbcs,-1);    
-  std::vector<double> dblBestLLKs(scl.nbcs,-1e300);  
+  std::vector<int32_t> dBest2s(scl.nbcs,-1);
+  std::vector<int32_t> dNext1s(scl.nbcs,-1);
+  std::vector<int32_t> dNext2s(scl.nbcs,-1);      
+  std::vector<double> dblBestLLKs(scl.nbcs,-1e300);
+  std::vector<double> dblNextLLKs(scl.nbcs,-1e300);
+  // posterior probs
   std::vector<double> bestPPs(scl.nbcs,-1e300);
   std::vector<double> sngPPs(scl.nbcs,-1e300);
   std::vector<double> sngOnlyPPs(scl.nbcs,-1e300);
+  std::vector<double> sumLLKs(scl.nbcs,-1e300);  
   std::vector<int32_t> types(scl.nbcs,-1);
       
   // calculate probabilities of singlets/doublets
@@ -443,48 +448,34 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	  llks[i] += log(lks[i]);
       }
 
-      int32_t jBest = -1, kBest = -1, jNext = -1, kNext = -1, sBest = -1, sNext = -1, dBest1 = -1, dBest2 = -1;
-      double bestLLK = -1e300;
-      double nextLLK = -1e300;      
+      //int32_t jBest = -1, kBest = -1, jNext = -1, kNext = -1;
+      int32_t sBest = -1, sNext = -1, dBest1 = -1, dBest2 = -1, dNext1 = -1, dNext2 = -1;
+      //double bestLLK = -1e300;
+      //double nextLLK = -1e300;      
       double sngBestLLK = -1e300;
       double sngNextLLK = -1e300;
-      double dblBestLLK = -1e300;      
+      double dblBestLLK = -1e300;
+      double dblNextLLK = -1e300;            
       double sumLLK = -1e300;
       double sngLLK = -1e300;
       double tmpLLK;
       for(int32_t j=0; j < nSamples; ++j) {
 	for(int32_t k=0; k < j; ++k) {
-	  tmpLLK = llks[j*(j+1)/2+k] + log_double_prior;
-	  if ( tmpLLK > bestLLK ) {
-	    jNext = jBest; kNext = kBest;
-	    nextLLK = bestLLK;
-	    jBest = j; kBest = k;
-	    bestLLK = tmpLLK;
-	  }
-	  else if ( tmpLLK > nextLLK ) {
-	    jNext = j; kNext = k;
-	    nextLLK = tmpLLK;
-	  }
-
+	  tmpLLK = llks[j*(j+1)/2+k]; // + log_double_prior;
 	  if ( tmpLLK > dblBestLLK ) {
+	    dNext1 = dBest1; dNext2 = dBest2;
+	    dblNextLLK = dblBestLLK;
 	    dBest1 = j; dBest2 = k;
 	    dblBestLLK = tmpLLK;
 	  }
-	  
-	  sumLLK = logAdd(sumLLK,tmpLLK);
-	}
-	tmpLLK = llks[j*(j+1)/2+j] + log_single_prior;
-	if ( tmpLLK > bestLLK ) {
-	  jNext = jBest; kNext = kBest;
-	  nextLLK = bestLLK;	  
-	  jBest = j; kBest = j;
-	  bestLLK = tmpLLK;
-	}
-	else if ( tmpLLK > nextLLK ) {
-	  jNext = j; kNext = j;
-	  nextLLK = tmpLLK;
+	  else if ( tmpLLK > dblNextLLK ) {
+	    dNext1 = j; dNext2 = k;
+	    dblNextLLK = tmpLLK;
+	  }
+	  sumLLK = logAdd(sumLLK,tmpLLK + log_double_prior);
 	}
 	
+	tmpLLK = llks[j*(j+1)/2+j]; //+ log_single_prior;
 	if ( tmpLLK > sngBestLLK ) {
 	  sNext = sBest;
 	  sngNextLLK = sngBestLLK;
@@ -495,26 +486,30 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	  sNext = j;
 	  sngNextLLK = tmpLLK;
 	}	
-	sumLLK = logAdd(sumLLK,tmpLLK);
-	sngLLK = logAdd(sngLLK,tmpLLK);	
+	sumLLK = logAdd(sumLLK,tmpLLK + log_single_prior);
+	sngLLK = logAdd(sngLLK,tmpLLK + log_single_prior);	
       }
 
-      jClusts[i] = jBest;
-      kClusts[i] = kBest;
-      bestLLKs[i] = bestLLK;
-      jNexts[i] = jNext;
-      kNexts[i] = kNext;
-      nextLLKs[i] = nextLLK;
-      sClusts[i] = sBest;
+      //jBests[i] = jBest;
+      //kBests[i] = kBest;
+      //bestLLKs[i] = bestLLK;
+      //jNexts[i] = jNext;
+      //kNexts[i] = kNext;
+      //nextLLKs[i] = nextLLK;
+      sBests[i] = sBest;
       sngBestLLKs[i] = sngBestLLK;
       sNexts[i] = sNext;
-      sngNextLLKs[i] = sngNextLLK;      
-      bestPPs[i] = exp(bestLLK - sumLLK);
-      sngPPs[i]  = exp(sngLLK - sumLLK);
-      sngOnlyPPs[i] = exp(sngBestLLK - sngLLK);
+      sngNextLLKs[i] = sngNextLLK;
       dBest1s[i] = dBest1;
       dBest2s[i] = dBest2;      
       dblBestLLKs[i] = dblBestLLK;
+      dNext1s[i] = dNext1;
+      dNext2s[i] = dNext2;      
+      dblBestLLKs[i] = dblNextLLK;
+      //bestPPs[i] = exp(bestLLK - sumLLK);
+      sngPPs[i]  = exp(sngLLK - sumLLK);
+      sngOnlyPPs[i] = exp(sngBestLLK + log_single_prior - sngLLK);
+      sumLLKs[i] = sumLLK;
     }
 
     clustPileup.clear();
@@ -523,27 +518,69 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     for(int32_t i=0; i < scl.nbcs; ++i) {
       std::map<int32_t,snp_droplet_pileup*>::const_iterator it = cell_snp_plps[i].begin();
       while(it != cell_snp_plps[i].end()) {
-	if ( ( jClusts[i] == kClusts[i] ) && ( bestPPs[i] > 0.8 ) ) {
-	  clustPileup[jClusts[i]][it->first].merge(*it->second);
+	if ( ( jBests[i] == kBests[i] ) && ( bestPPs[i] > 0.8 ) ) {
+	  clustPileup[jBests[i]][it->first].merge(*it->second);
 	}
 	++it;
       }
 
-      if ( ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) && ( jClusts[i] != kClusts[i] ) ) {
+      if ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) {
 	types[i] = 1; // doublet
+	bestPPs[i] = ( dblBestLLKs[i] + log_double_prior - sumLLKs[i] );
+	jBests[i] = dBest1s[i];
+	kBests[i] = dBest2s[i];
+	bestLLKs[i] = dblBestLLKs[i];
+
+	if ( dblNextLLKs[i] > sngBestLLKs[i] + 2 ) {
+	  jNexts[i] = dBest1s[i];
+	  kNexts[i] = dBest2s[i];
+	  nextLLKs[i] = dblNextLLKs[i];
+	}
+	else {
+	  jNexts[i] = kNexts[i] = sBests[i];
+	  nextLLKs[i] = sngBestLLKs[i];
+	}
       }
       else if ( sngBestLLKs[i] > sngNextLLKs[i] + 2 ) {
 	types[i] = 0; // singlet
 	++nsingle;
+
+	bestPPs[i] = ( sngBestLLKs[i] + log_single_prior - sumLLKs[i] );
+	jBests[i] = kBests[i] = sBests[i];
+	bestLLKs[i] = sngBestLLKs[i];
+
+	if ( dblBestLLKs[i] > sngNextLLKs[i] + 2 ) {
+	  jNexts[i] = dBest1s[i];
+	  kNexts[i] = dBest2s[i];
+	  nextLLKs[i] = dblNextLLKs[i];	  
+	}
+	else {
+	  jNexts[i] = kNexts[i] = sNexts[i];
+	  nextLLKs[i] = sngNextLLKs[i];	  
+	}
       }
       else {
 	types[i] = 2; // ambiguous
 	++namb;
+
+	bestPPs[i] = ( sngBestLLKs[i] + log_single_prior - sumLLKs[i] );
+	jBests[i] = kBests[i] = sBests[i];
+	bestLLKs[i] = sngBestLLKs[i];
+
+	if ( dblBestLLKs[i] > sngNextLLKs[i] + 2 ) {
+	  jNexts[i] = dBest1s[i];
+	  kNexts[i] = dBest2s[i];
+	  nextLLKs[i] = dblNextLLKs[i];	  
+	}
+	else {
+	  jNexts[i] = kNexts[i] = sNexts[i];
+	  nextLLKs[i] = sngNextLLKs[i];	  
+	}	
       }
       
       // old criteria
       //if ( bestPPs[i] < 0.8 ) ++namb;
-      //else if ( jClusts[i] == kClusts[i] ) ++nsingle;      
+      //else if ( jBests[i] == kBests[i] ) ++nsingle;      
     }
 
     notice("Refining per-cluster genotype likelihoods.... %d singlets, %d doublets, and %d ambiguous", nsingle, scl.nbcs-nsingle-namb, namb);    
@@ -576,7 +613,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   htsFile* wc1 = hts_open((outPrefix+".clust1.samples.gz").c_str(),"wz");
   hprintf(wc1, "INT_ID\tBARCODE\tNUM.SNPS\tNUM.READS\tDROPLET.TYPE\tBEST.GUESS\tBEST.LLK\tNEXT.GUESS\tNEXT.LLK\tDIFF.LLK.BEST.NEXT\tBEST.POSTERIOR\tSNG.POSTERIOR\tSNG.BEST.GUESS\tSNG.BEST.LLK\tSNG.NEXT.GUESS\tSNG.NEXT.LLK\tSNG.ONLY.POSTERIOR\tDBL.BEST.GUESS\tDBL.BEST.LLK\tDIFF.LLK.SNG.DBL\n");
   for(int32_t i=0; i < scl.nbcs; ++i) {
-    hprintf(wc1, "%d\t%s\t%d\t%d\t%s\t%d,%d\t%.2lf\t%d,%d\t%.2lf\t%.2lf\t%.5lf\t%.2lg\t%d\t%.2lf\t%d\t%.2lf\t%.5lf\t%d,%d\t%.2lf\t%.2lf\n", i, scl.bcs[i].c_str(), nSNPs[i], nReads[i], (types[i] == 2) ? "AMB" : ((types[i] == 0) ? "SNG" : "DBL"), jClusts[i], kClusts[i], bestLLKs[i], jNexts[i], kNexts[i], nextLLKs[i], bestLLKs[i]-nextLLKs[i], bestPPs[i], sngPPs[i], sClusts[i], sngBestLLKs[i], sNexts[i], sngNextLLKs[i], sngOnlyPPs[i], dBest1s[i], dBest2s[i], dblBestLLKs[i], sngBestLLKs[i]-dblBestLLKs[i]);
+    hprintf(wc1, "%d\t%s\t%d\t%d\t%s\t%d,%d\t%.2lf\t%d,%d\t%.2lf\t%.2lf\t%.5lf\t%.2lg\t%d\t%.2lf\t%d\t%.2lf\t%.5lf\t%d,%d\t%.2lf\t%.2lf\n", i, scl.bcs[i].c_str(), nSNPs[i], nReads[i], (types[i] == 2) ? "AMB" : ((types[i] == 0) ? "SNG" : "DBL"), jBests[i], kBests[i], bestLLKs[i], jNexts[i], kNexts[i], nextLLKs[i], bestLLKs[i]-nextLLKs[i], bestPPs[i], sngPPs[i], sBests[i], sngBestLLKs[i], sNexts[i], sngNextLLKs[i], sngOnlyPPs[i], dBest1s[i], dBest2s[i], dblBestLLKs[i], sngBestLLKs[i]-dblBestLLKs[i]);
   }
   hts_close(wc1);  
 
