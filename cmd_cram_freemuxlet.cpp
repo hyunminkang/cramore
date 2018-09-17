@@ -516,14 +516,6 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     clustPileup.resize(nSamples);
     int32_t nsingle = 0, namb = 0;
     for(int32_t i=0; i < scl.nbcs; ++i) {
-      std::map<int32_t,snp_droplet_pileup*>::const_iterator it = cell_snp_plps[i].begin();
-      while(it != cell_snp_plps[i].end()) {
-	if ( ( jBests[i] == kBests[i] ) && ( bestPPs[i] > 0.8 ) ) {
-	  clustPileup[jBests[i]][it->first].merge(*it->second);
-	}
-	++it;
-      }
-
       if ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) {
 	types[i] = 1; // doublet
 	bestPPs[i] = ( dblBestLLKs[i] + log_double_prior - sumLLKs[i] );
@@ -580,7 +572,15 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       
       // old criteria
       //if ( bestPPs[i] < 0.8 ) ++namb;
-      //else if ( jBests[i] == kBests[i] ) ++nsingle;      
+      //else if ( jBests[i] == kBests[i] ) ++nsingle;
+
+      std::map<int32_t,snp_droplet_pileup*>::const_iterator it = cell_snp_plps[i].begin();
+      while(it != cell_snp_plps[i].end()) {
+	if ( ( jBests[i] == kBests[i] ) && ( types[i] == 0 ) ) {
+	  clustPileup[jBests[i]][it->first].merge(*it->second);
+	}
+	++it;
+      }      
     }
 
     notice("Refining per-cluster genotype likelihoods.... %d singlets, %d doublets, and %d ambiguous", nsingle, scl.nbcs-nsingle-namb, namb);    
