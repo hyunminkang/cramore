@@ -109,7 +109,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   double* gps = NULL;
     
   if ( !plpPrefix.empty() ) {
-    int nrd = 0;
+    //int nrd = 0;
     if ( !sr.sam_file_name.empty() ) {      
       error("with --plp option, neither --sam option cannot be used");
     }
@@ -390,14 +390,16 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   // Calculate average genotype probability
   double* gp0s = (double*) calloc(scl.nsnps * 3, sizeof(double)); 
   for(int32_t i=0; i < scl.nsnps; ++i) {
-    for(int32_t j=0; j < nv; ++j) {
-      gp0s[i*3] += scl.snps[i].gps[3*j];
-      gp0s[i*3+1] += scl.snps[i].gps[3*j+1];
-      gp0s[i*3+2] += scl.snps[i].gps[3*j+2];      
+    if ( scl.snps[i].gps != NULL ) {
+      for(int32_t j=0; j < nv; ++j) {
+	gp0s[i*3] += scl.snps[i].gps[3*j];
+	gp0s[i*3+1] += scl.snps[i].gps[3*j+1];
+	gp0s[i*3+2] += scl.snps[i].gps[3*j+2];      
+      }
+      gp0s[i*3] /= nv;
+      gp0s[i*3+1] /= nv;
+      gp0s[i*3+2] /= nv;
     }
-    gp0s[i*3] /= nv;
-    gp0s[i*3+1] /= nv;
-    gp0s[i*3+2] /= nv;    
   }
   
   // start evaluating genotype concordances
@@ -452,11 +454,13 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       GLs[2] /= tmp;  
       
       gps = scl.snps[i].gps;
-      for(int32_t k=0; k < nv; ++k) {
-	llks[it->first * nv + k] += log(GLs[0]*gps[k*3] + GLs[1]*gps[k*3+1] + GLs[2]*gps[k*3+2]);
-	//if ( rand() % 1000 == 0 ) notice("%lg %lg %lg",gps[k*3],gps[k*3+1],gps[k*3+2]);
+      if ( gps != NULL ) {
+	for(int32_t k=0; k < nv; ++k) {
+	  llks[it->first * nv + k] += log(GLs[0]*gps[k*3] + GLs[1]*gps[k*3+1] + GLs[2]*gps[k*3+2]);
+	  //if ( rand() % 1000 == 0 ) notice("%lg %lg %lg",gps[k*3],gps[k*3+1],gps[k*3+2]);
+	}
+	llk0s[it->first] += log( GLs[0] * gp0s[i*3] + GLs[1] * gp0s[i*3+1] + GLs[2] * gp0s[i*3+2] );
       }
-      llk0s[it->first] += log( GLs[0] * gp0s[i*3] + GLs[1] * gp0s[i*3+1] + GLs[2] * gp0s[i*3+2] );
     }
   }
  
@@ -540,8 +544,10 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   // here we iterate each cell separately.
   // pre-calculate nsnp*nv*nv*9, nv*1*9, 1*nv*9, 1*9
   //double* gpAB = new double[scl.nsnps * nv * nv * 9];
-  double* gpA0 = new double[scl.nsnps * nv * 9];
-  double* gp00 = new double[scl.nsnps * 9];
+  std::vector<double*> gpA0(scl.nsnps, NULL);
+  std::vector<double*> gp00(scl.nsnps, NULL);  
+  //double* gpA0 = new double*//new double[scl.nsnps * nv * 9];
+  //double* gp00 = //new double[scl.nsnps * 9];
 
   //double** gpAB0 = new (double*)[ scl.nsnps ];
   //double *gpAB = NULL, *gpA0 = NULL, *gp00 = NULL;
@@ -551,11 +557,17 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     for(j=0; j < nv; ++j) {
       for(k=0; k < nv; ++k) {
 	gps = scl.snps[i].gps;
-	for(l=0; l < 3; ++l) {
-	  for(m=0; m < 3; ++m) {
-	    //gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];
-	    gpA0[i*nv*9 + j*9 + l*3 + m] = gps[j*3+l] * gp0s[i*3+m];
-	    gp00[i*9 + l*3 + m] = gp0s[i*3+l] * gp0s[i*3+m];	    
+	if ( gps != NULL ) {
+	  gpA0[i] = new double[nv * 9];
+	  gp00[i] = new double[9];	  
+	  for(l=0; l < 3; ++l) {
+	    for(m=0; m < 3; ++m) {
+	      //gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];
+	      //gpA0[i*nv*9 + j*9 + l*3 + m] = gps[j*3+l] * gp0s[i*3+m];
+	      //gp00[i*9 + l*3 + m] = gp0s[i*3+l] * gp0s[i*3+m];
+	      gpA0[i][j*9 + l*3 + m] = gps[j*3+l] * gp0s[i*3+m];
+	      gp00[i][l*3 + m] = gp0s[i*3+l] * gp0s[i*3+m];	    	      
+	    }
 	  }
 	}
       }
@@ -671,48 +683,52 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       double p;
       int32_t j, k, l, m, n;
 
-      for(j=jbeg; j < jend; ++j) {
-	// pairwise LLK
-	for(k=0; k < nv; ++k) {
+      if ( scl.snps[isnp].gps != NULL ) {
+	for(j=jbeg; j < jend; ++j) {
+	  // pairwise LLK
+	  for(k=0; k < nv; ++k) {
+	    std::fill(sumPs.begin(), sumPs.end(), 0);
+	    for(l=0; l < 3; ++l) {
+	      for(m=0; m < 3; ++m) {
+		//gps = scl.snps[i].gps;	      
+		//p = gpAB[isnp*nv*nv*9 + j*nv*9 + k*9 + l*3 + m];
+		//gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];	      
+		p = scl.snps[isnp].gps[j*3+l] * scl.snps[isnp].gps[k*3+m]; 
+		for(n=0; n < nAlpha; ++n) 
+		  sumPs[n] += (p * pGs[n*9+l*3+m]);
+	      }
+	    }
+	    for(n=0; n < nAlpha; ++n)
+	      llksAB[(j-jbeg)*nv*nAlpha + k*nAlpha + n] += log(sumPs[n]);
+	  }
+	  
+	  // A0 LLK
 	  std::fill(sumPs.begin(), sumPs.end(), 0);
 	  for(l=0; l < 3; ++l) {
 	    for(m=0; m < 3; ++m) {
-	      //gps = scl.snps[i].gps;	      
-	      //p = gpAB[isnp*nv*nv*9 + j*nv*9 + k*9 + l*3 + m];
-	      //gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];	      
-	      p = scl.snps[isnp].gps[j*3+l] * scl.snps[isnp].gps[k*3+m]; 
+	      //p = gpA0[isnp*nv*9 + j*9 + l*3 + m];
+	      p = gpA0[isnp][j*9 + l*3 + m];	      
 	      for(n=0; n < nAlpha; ++n) 
 		sumPs[n] += (p * pGs[n*9+l*3+m]);
 	    }
 	  }
 	  for(n=0; n < nAlpha; ++n)
-	    llksAB[(j-jbeg)*nv*nAlpha + k*nAlpha + n] += log(sumPs[n]);
+	    llksA0[(j-jbeg)*nAlpha + n] += log(sumPs[n]);	
 	}
 
-	// A0 LLK
+	// 00 LLK
 	std::fill(sumPs.begin(), sumPs.end(), 0);
 	for(l=0; l < 3; ++l) {
 	  for(m=0; m < 3; ++m) {
-	    p = gpA0[isnp*nv*9 + j*9 + l*3 + m];
+	    //p = gp00[isnp*9 + l*3 + m];
+	    p = gp00[isnp][l*3 + m];	    
 	    for(n=0; n < nAlpha; ++n) 
 	      sumPs[n] += (p * pGs[n*9+l*3+m]);
 	  }
 	}
 	for(n=0; n < nAlpha; ++n)
-	  llksA0[(j-jbeg)*nAlpha + n] += log(sumPs[n]);	
+	  llks00[n] += log(sumPs[n]);
       }
-
-      // 00 LLK
-      std::fill(sumPs.begin(), sumPs.end(), 0);
-      for(l=0; l < 3; ++l) {
-	for(m=0; m < 3; ++m) {
-	  p = gp00[isnp*9 + l*3 + m];
-	  for(n=0; n < nAlpha; ++n) 
-	    sumPs[n] += (p * pGs[n*9+l*3+m]);
-	}
-      }
-      for(n=0; n < nAlpha; ++n)
-	llks00[n] += log(sumPs[n]);
     }
 
     // normalize by max likelihood

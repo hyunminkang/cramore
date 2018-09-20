@@ -169,35 +169,53 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
     }
     else {
-      // find the variant from VCF. The VCF must be identical to what was provided before
-      bcf1_t* v = pvr->cursor();
-      while( ( !pvr->eof ) &&
-	     ( ( v->rid != rid ) ||
-	       ( v->pos + 1 != pos ) ||
-	       ( v->d.allele[0][0] != ref ) ||
-	       ( v->d.allele[1][0] != alt ) ) ) {
-	if ( v->rid > rid )
-	  error("Could not find variant %s:%d:%c:%c from VCF file", tsv_varf.str_field_at(0), pos, ref, alt);	  
-	if ( rand() % 10000 == 0 )
-	  verbose(50, "Reading variant info %s:%d:%c:%c at %s:%d:%c:%c", tsv_varf.str_field_at(0), pos, ref, alt, bcf_hdr_id2name(pvr->cdr.hdr, v->rid), v->pos+1, v->d.allele[0][0], v->d.allele[1][0] );
-	pvr->read();
+      // find the variant from VCF. The VCF must be overlapping with what was provided before
+      bcf1_t* v = pvr->cursor(); // read it and have not iterated over yet
+
+      if ( rand() % 10000 == 0 )
+	verbose(50, "Reading variant info %s:%d:%c:%c at %s:%d:%c:%c", tsv_varf.str_field_at(0), pos, ref, alt, bcf_hdr_id2name(pvr->cdr.hdr, v->rid), v->pos+1, v->d.allele[0][0], v->d.allele[1][0] );
+      
+      // we need to
+      // 1. If the position exactly matches
+      //    1.1.  If the alleles do not match, throw error
+      //    1.2.  Otherwise, add the cursor (GP/GT should be available)
+      // 2. If the cursor already passed the current position from var.gz
+      //    Pretend that there is a SNP, but with empty GP (add a way to handle empty GP)
+      // 3. If the cursor has not passed the current position from var.gz
+      //    Simply ignore the and iterate more markers from VCF
+      bool found = false;
+      bool passed = false;
+      while ( ! ( found || passed ) ) {
+	if ( pvr->eof ) { passed = true; }
+	else if ( v->rid > rid ) { passed = true; }
+	else if ( v->rid == rid ) { // same chromosome
+	  if ( v->pos + 1 > pos ) { passed = true; }
+	  else if ( v->pos + 1 == pos ) {
+	    if ( ( v->d.allele[0][0] != ref ) || ( v->d.allele[1][0] != alt ) )
+	      error("Could not find variant %s:%d:%c:%c from VCF file", tsv_varf.str_field_at(0), pos, ref, alt);	  
+	    found = true;
+	  }
+	}
+
+	if ( passed ) {
+	  if ( add_snp(rid, pos, ref, alt, af, NULL) + 2 != tsv_varf.nlines )
+	    error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
+	  break;
+	}
+	else if ( found ) {
+	  if ( ! pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
+	    error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,v->rid), v->pos+1);
+	  double* gps = new double[nv*3];
+	  for(int32_t i=0; i < nv * 3; ++i) {
+	    gps[i] = pvr->get_posterior_at(i);
+	  }
+	  if ( add_snp(rid, pos, ref, alt, af, gps) + 2 != tsv_varf.nlines )
+	    error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
+	}
+	pvr->read();	
 	v = pvr->cursor();
 	++nrd;
       }
-
-      if ( pvr->eof ) {
-	error("[E:%s] Cannot find variant at %s:%d:%c:%c nrd = %d", tsv_varf.str_field_at(0), pos, ref, alt, nrd);
-      }
-
-      if ( ! pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
-	error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,v->rid), v->pos+1);
-	  
-      double* gps = new double[nv*3];
-      for(int32_t i=0; i < nv * 3; ++i) {
-	gps[i] = pvr->get_posterior_at(i);
-      }
-      if ( add_snp(rid, pos, ref, alt, af, gps) + 2 != tsv_varf.nlines )
-	error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);      
     }
   }
   verbose(50, "Finished loading %d variants..", nsnps);  
