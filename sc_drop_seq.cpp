@@ -192,8 +192,14 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	  if ( v->pos + 1 > pos ) { passed = true; }
 	  else if ( v->pos + 1 == pos ) {
 	    if ( ( v->d.allele[0][0] != ref ) || ( v->d.allele[1][0] != alt ) )
-	      error("Could not find variant %s:%d:%c:%c from VCF file", tsv_varf.str_field_at(0), pos, ref, alt);	  
-	    found = true;
+	      //error("Could not find variant %s:%d:%c:%c from genotype VCF file, cursor:%d:%d:%c:%c", tsv_varf.str_field_at(0), pos, ref, alt, v->rid, v->pos +1, v->d.allele[0][0], v->d.allele[1][0]);	  
+	      //multi-allele,cursor passed, read next var.gz marker
+	    {
+		    passed = true;
+		    //break;//because it has been added previously
+	    }
+	    else
+		found = true;
 	  }
 	}
 
@@ -211,6 +217,7 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	  }
 	  if ( add_snp(rid, pos, ref, alt, af, gps) + 2 != tsv_varf.nlines )
 	    error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
+	  break;
 	}
 	pvr->read();	
 	v = pvr->cursor();
