@@ -554,12 +554,11 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   int32_t j, k, l, m, n;  
   for(i=0; i < scl.nsnps; ++i) {
     //gpAB0[i] = new double[nv * nv * 9 + nv * 9 + 9];
-    for(j=0; j < nv; ++j) {
-      for(k=0; k < nv; ++k) {
-	gps = scl.snps[i].gps;
-	if ( gps != NULL ) {
-	  gpA0[i] = new double[nv * 9];
-	  gp00[i] = new double[9];	  
+    gps = scl.snps[i].gps;
+    if ( gps != NULL ) {
+	gpA0[i] = new double[nv * 9];
+	gp00[i] = new double[9];
+    	for(j=0; j < nv; ++j) {
 	  for(l=0; l < 3; ++l) {
 	    for(m=0; m < 3; ++m) {
 	      //gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];
@@ -570,7 +569,6 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	    }
 	  }
 	}
-      }
     }
   }
 
