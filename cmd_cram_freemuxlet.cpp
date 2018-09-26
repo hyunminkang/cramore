@@ -3,6 +3,7 @@
 #include "sam_filtered_reader.h"
 #include "sc_drop_seq.h"
 #include "louvain.h"
+#include <ctime>
 
 struct dropD {
   int32_t nsnps;
@@ -344,25 +345,56 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     }
   }
 
+  time_t now = std::time(NULL);
+  tm *ltm = localtime(&now);
+
   if ( auxFiles ) {
     htsFile* vc0 = hts_open((outPrefix+".clust0.vcf.gz").c_str(),"wz");
-    hprintf(vc0,"##CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+    hprintf(vc0,"##fileformat=VCFv4.2\n");
+    hprintf(vc0,"##fileDate=%04d%02d%02d\n",1970+ltm->tm_year,1+ltm->tm_mon,ltm->tm_mday);
+    hprintf(vc0,"##source=cramore-freemuxlet\n");
+    for(int32_t i=0; i < (int32_t)scl.rid2chr.size(); ++i)
+      hprintf(vc0, "##contig=<ID=%s>\n", scl.rid2chr[i].c_str());
+    hprintf(vc0,"##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">\n");
+    hprintf(vc0,"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
+    hprintf(vc0,"##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Phred-scale Genotype Quality\">\n");    
+    hprintf(vc0,"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">\n");
+    
+    hprintf(vc0,"##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic Read Depth\">\n");
+    hprintf(vc0,"##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scale genotype likelihood\">\n");        
+    hprintf(vc0,"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
     for(int32_t i=0; i < nSamples; ++i) hprintf(vc0, "\tCLUST%d", i);
     hprintf(vc0, "\n");
     for(int32_t v=0; v < scl.nsnps; ++v) {
       if ( !snps_observed[v] ) continue;
       sc_snp_t& s = scl.snps[v];
       hprintf(vc0,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",scl.rid2chr[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
+      double gps[3] = { (1-s.af)*(1-s.af), 2.*s.af*(1-s.af), s.af*s.af };
+      double pps[3], sumPP;
+      int32_t pls[3];
+      int bestG, gq;
       for(int32_t i=0; i < nSamples; ++i) {
 	snp_droplet_pileup& sdp = clustPileup[i][v];
 	double maxGL = sdp.gls[0];
 	if ( maxGL < sdp.gls[4] ) maxGL = sdp.gls[4];
 	if ( maxGL < sdp.gls[8] ) maxGL = sdp.gls[8];
-	int32_t pls[3];
 	pls[0] = (int)(-10.0*log10(sdp.gls[0]/maxGL));
 	pls[1] = (int)(-10.0*log10(sdp.gls[4]/maxGL));
-	pls[2] = (int)(-10.0*log10(sdp.gls[8]/maxGL));      
-	hprintf(vc0,"\t%d:%d,%d:%d,%d,%d",sdp.nreads,sdp.nref,sdp.nalt,pls[0],pls[1],pls[2]);
+	pls[2] = (int)(-10.0*log10(sdp.gls[8]/maxGL));
+
+	pps[0] = gps[0] * sdp.gls[0] / maxGL + 1e-100;
+	pps[1] = gps[1] * sdp.gls[1] / maxGL + 1e-100;
+	pps[2] = gps[2] * sdp.gls[2] / maxGL + 1e-100;
+	sumPP = pps[0] + pps[1] + pps[2];
+
+	pps[0] /= sumPP;
+	pps[1] /= sumPP;
+	pps[2] /= sumPP;
+
+	bestG = ( pps[0] > pps[1] ) ? ( pps[0] > pps[2] ? 0 : 2 ) : ( pps[1] > pps[2] ? 1 : 2 );
+	gq = (int)(-0.1*log10(1-pps[bestG]+1e-100));
+	if ( gq > 255 ) gq = 255;
+	hprintf(vc0,"\t%d/%d:%d:%d:%d,%d:%d,%d,%d",bestG == 2 ? 1 : 0, bestG > 0 ? 1 : 0, gq, sdp.nreads,sdp.nref,sdp.nalt,pls[0],pls[1],pls[2]);
       }
       hprintf(vc0,"\n");
     }
@@ -588,23 +620,51 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 
 
   htsFile* vc1 = hts_open((outPrefix+".clust1.vcf.gz").c_str(),"wz");
-  hprintf(vc1,"##CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+  hprintf(vc1,"##fileformat=VCFv4.2\n");
+  hprintf(vc1,"##fileDate=%04d%02d%02d\n",1970+ltm->tm_year,1+ltm->tm_mon,ltm->tm_mday);
+  hprintf(vc1,"##source=cramore-freemuxlet\n");
+  for(int32_t i=0; i < (int32_t)scl.rid2chr.size(); ++i)
+    hprintf(vc1, "##contig=<ID=%s>\n", scl.rid2chr[i].c_str());
+  hprintf(vc1,"##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">\n");
+  hprintf(vc1,"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
+  hprintf(vc1,"##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Phred-scale Genotype Quality\">\n");    
+  hprintf(vc1,"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">\n");
+  
+  hprintf(vc1,"##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic Read Depth\">\n");
+  hprintf(vc1,"##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scale genotype likelihood\">\n");        
+  hprintf(vc1,"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");  
   for(int32_t i=0; i < nSamples; ++i) hprintf(vc1, "\tCLUST%d", i);
   hprintf(vc1, "\n");
   for(int32_t v=0; v < scl.nsnps; ++v) {
     if ( !snps_observed[v] ) continue;
     sc_snp_t& s = scl.snps[v];
     hprintf(vc1,"%s\t%d\t.\t%c\t%c\t.\tPASS\tAF=%.5lf\tDP:AD:PL",scl.rid2chr[s.rid].c_str(),s.pos,s.ref,s.alt,s.af);
+    double gps[3] = { (1-s.af)*(1-s.af), 2.*s.af*(1-s.af), s.af*s.af };
+    double pps[3], sumPP;
+    int32_t pls[3];    
+    int bestG, gq;    
     for(int32_t i=0; i < nSamples; ++i) {
       snp_droplet_pileup& sdp = clustPileup[i][v];
       double maxGL = sdp.gls[0];
       if ( maxGL < sdp.gls[4] ) maxGL = sdp.gls[4];
       if ( maxGL < sdp.gls[8] ) maxGL = sdp.gls[8];
-      int32_t pls[3];
       pls[0] = (int)(-10.0*log10(sdp.gls[0]/maxGL));
       pls[1] = (int)(-10.0*log10(sdp.gls[4]/maxGL));
-      pls[2] = (int)(-10.0*log10(sdp.gls[8]/maxGL));      
-      hprintf(vc1,"\t%d:%d,%d:%d,%d,%d",sdp.nreads,sdp.nref,sdp.nalt,pls[0],pls[1],pls[2]);
+      pls[2] = (int)(-10.0*log10(sdp.gls[8]/maxGL));
+      
+      pps[0] = gps[0] * sdp.gls[0] / maxGL + 1e-100;
+      pps[1] = gps[1] * sdp.gls[1] / maxGL + 1e-100;
+      pps[2] = gps[2] * sdp.gls[2] / maxGL + 1e-100;
+      sumPP = pps[0] + pps[1] + pps[2];
+      
+      pps[0] /= sumPP;
+      pps[1] /= sumPP;
+      pps[2] /= sumPP;
+      
+      bestG = ( pps[0] > pps[1] ) ? ( pps[0] > pps[2] ? 0 : 2 ) : ( pps[1] > pps[2] ? 1 : 2 );
+      gq = (int)(-0.1*log10(1-pps[bestG]+1e-100));
+      if ( gq > 255 ) gq = 255;
+      hprintf(vc1,"\t%d/%d:%d:%d:%d,%d:%d,%d,%d",bestG == 2 ? 1 : 0, bestG > 0 ? 1 : 0, gq, sdp.nreads,sdp.nref,sdp.nalt,pls[0],pls[1],pls[2]);
     }
     hprintf(vc1,"\n");
   }
