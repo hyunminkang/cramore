@@ -311,8 +311,10 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
     int64_t no_reads = 0;
     int64_t no_filt_reads = 0;
 
-    if ( sample_names[i].compare(bam_hdr_get_sample_name(h)) != 0 )
-      warning("The same name %s is different from the same name %s from %s. Continuing with the former one", sample_names[i].c_str(), bam_hdr_get_sample_name(h).c_str(), cram_paths[i].c_str());
+    std::string bam_sm_name = bam_hdr_get_sample_name(h);
+
+    if ( sample_names[i].compare(bam_sm_name) != 0 )
+      warning("The same name %s is different from the same name %s from %s. Continuing with the former one", sample_names[i].c_str(), bam_sm_name.c_str(), cram_paths[i].c_str());
 
     jgbr.set_sample(i, sample_names[i].c_str(), contams[i], evecs[i]);
 
