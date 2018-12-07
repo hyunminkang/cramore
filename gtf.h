@@ -27,6 +27,7 @@
 #include <cstring>
 #include <climits>
 #include "Error.h"
+#include "gtf_interval_tree.h"
 
 // A single genomic int32_t interval
 class posLocus {
@@ -186,7 +187,7 @@ public:
 class gtf {
 // transcript : gene
 public:
-  gtf(const char* gtfFile);
+  gtf(const char* gtfFile, bool proteinCodingOnly = false, bool addChrPrefix = false, bool removeChrPrefix = false);
   ~gtf();
 
   int32_t maxGeneLength;
@@ -197,15 +198,19 @@ public:
   int32_t maxStartCodonLength;
   int32_t maxStopCodonLength;
 
-  std::map<std::string, std::multimap<posLocus, gtfElement*> > mmap;
+  typedef std::multimap<posLocus, gtfElement*> gtf_chr_t;
+  typedef std::map<std::string, gtf_chr_t >::iterator gtf_chr_it_t;
+  std::map<std::string, gtf_chr_t > mmap;
+
+  typedef gtfIntervalTree<int32_t,gtfElement*> gtf_ivt_t;
+  //typedef gtfInterval<int32_t,gtfElement*> gtf_iv_t;  
+  std::map<std::string, gtf_ivt_t> chr2ivt;
+  
   std::map<std::string, gtfGene*> gid2Gene;
   std::map<std::string, gtfTranscript*> tid2Transcript;
   std::map<std::string, gtfGene*> tid2Gene;
 
-  typedef std::map<std::string, std::multimap<posLocus, gtfElement*> >::iterator gtf_chr_it_t;
-  typedef std::map<std::string, std::multimap<posLocus, gtfElement*> > gtf_mmap_t;
   typedef std::multimap<posLocus, gtfElement*>::iterator gtf_elem_it_t;  
-  typedef std::multimap<posLocus, gtfElement*> gtf_chr_t;  
 
   gtf_chr_it_t   curChrIt;
   gtf_elem_it_t  curElemIt;
@@ -243,6 +248,8 @@ public:
 	       std::string& tid);
 
   bool checkTranscriptSanity(std::string& tid, const char* seqname, const char* strand);
+
+  int32_t findOverlappingElements(const char* seqname, int32_t start, int32_t end, std::set<gtfElement*>& results);
 };
 
 #endif

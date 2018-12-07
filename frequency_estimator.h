@@ -61,10 +61,12 @@ class frequency_estimator : public VectorFunc {
   double estimate_pooled_af_em(int32_t maxiter=10);
   
   void estimate_isaf_em(int32_t maxiter = 20);
+  void estimate_isaf_em_hwd(int32_t maxiter = 20);  
   void estimate_isaf_lrt();  
   void estimate_isaf_simplex();
   
   bool score_test_hwe(bool use_isaf = true);
+  //bool lr_test_hwe(bool use_isaf = true);  
   bool update_variant();
   bool update_gt_gq(bool update_gq = true);
   virtual double Evaluate(Vector& v);  

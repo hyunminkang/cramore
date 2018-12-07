@@ -67,6 +67,8 @@ int32_t cmdBgenToVcf(int32_t argc, char** argv);
 int32_t cmdCramVerifyBam(int32_t argc, char** argv);
 int32_t cmdCramUpdateRG(int32_t argc, char** argv);
 int32_t cmdGtfUtil(int32_t argc, char** argv);
+int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv);
+int32_t cmdPlpFindMuxClust(int32_t argc, char** argv);
 
 
 int32_t main(int32_t argc, char** argv) {
@@ -116,13 +118,15 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("kallisto-count", &cmdScKallistoCount, "Produce digital expression matrix from kallisto-aligned sequence reads")
     LONG_COMMAND("sc-map-stamps", &cmdScMapSTAMPs, "Produce STAMP-map from DropSeq FASTQ files")
     LONG_COMMAND("sc-multinom-em", &cmdScMultinomEM, "Multinomial EM clustering of single cell types")
-    LONG_COMMAND("sc-multinom-gibbs", &cmdScMultinomGibbs, "Multinomial Gibbs sampling of single cell types")    
+    LONG_COMMAND("sc-multinom-gibbs", &cmdScMultinomGibbs, "Multinomial Gibbs sampling of single cell types")
+    LONG_COMMAND("plp-find-mux-clust", &cmdPlpFindMuxClust, "(Experimental) Perform tSNE clustering on mux-seq data")    
 
     LONG_COMMAND_GROUP("Other tools", NULL)
     LONG_COMMAND("bed-matched-shuffle",&cmdBedMatchedShuffle, "Shuffle BED regions adjusting for GC contents and repeats")
     LONG_COMMAND("bed-shuffle",&cmdBedShuffle, "Shuffle BED regions randomly")        
     LONG_COMMAND("fasta-gc-content", &cmdFastaGCContent, "Create GC content profile")
-    LONG_COMMAND("gtf-util", &cmdGtfUtil, "A simple GTF utility")    
+    LONG_COMMAND("gtf-util", &cmdGtfUtil, "A simple GTF utility")
+    LONG_COMMAND("plp-make-dge-matrix", &cmdPlpMakeDGEMatrix, "Make Digital Expression Matrix from Digital Pileups")
   END_LONG_COMMANDS();
 
   cl.Add(new longCommands("Available Commands", longCommandlines));

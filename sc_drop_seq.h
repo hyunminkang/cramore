@@ -36,6 +36,12 @@ class sc_snp_t {
   double* gps;
 };
 
+double logAdd(double la, double lb);
+//{
+//  if ( la > lb ) { return la + log(1.0 + exp(lb-la)); }
+//  else           { return lb + log(1.0 + exp(la-lb)); }  
+//}
+
 class sc_dropseq_lib_t {
  public:
   // vector containing SNP & genotype info, index is snp_id
@@ -64,7 +70,7 @@ class sc_dropseq_lib_t {
   int32_t add_cell(const char* barcode);
   bool add_read(int32_t snpid, int32_t cellid, const char* umi, char allele, char qual);
 
-  int32_t load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr = NULL, const char* field = "GP", double genoError = 0.1, bool loadUMI = false);
+  int32_t load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr = NULL, const char* field = "GP", double genoErrorOffset = 0.1, double genoErrorCoeffR2 = 0.0, const char* r2info = "R2", bool loadUMI = false);
 
  sc_dropseq_lib_t() : nbcs(0), nsnps(0) {}
 };
@@ -110,6 +116,36 @@ struct snp_droplet_pileup {
 
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls);
 double calculate_snp_droplet_doublet_GL(sc_snp_droplet_t* ssd, double* gls, double alpha);
-double calculate_snp_droplet_pileup(sc_snp_droplet_t* ssd, snp_droplet_pileup* sdp, double alpha); 
+double calculate_snp_droplet_pileup(sc_snp_droplet_t* ssd, snp_droplet_pileup* sdp, double alpha);
+
+struct dropD {
+  int32_t nsnps;
+  int32_t nread1;
+  int32_t nread2;
+  double llk0;
+  double llk2;
+
+  dropD() : nsnps(0), nread1(0), nread2(0), llk0(0), llk2(0) {}
+  /*
+  dropD(int32_t _nsnps, double _llk0, double _llk2) :
+    nsnps(_nsnps), nreads(_nreads), llk2(_llk2) {}
+
+  void set(int32_t _nsnps, double _llk0, double _llk2) {
+    nsnps = _nsnps;
+    llk0 = _llk0;
+    llk2 = _llk2;
+  }
+  */
+};
+
+struct sc_drop_comp_t {
+  sc_dropseq_lib_t* pscl;
+  sc_drop_comp_t(sc_dropseq_lib_t* p) : pscl(p) {}
+  bool operator()(const int32_t& lhs, const int32_t& rhs) const {
+    double cmp = pscl->cell_scores[lhs] - pscl->cell_scores[rhs];
+    if ( cmp != 0 ) return cmp > 0;
+    else return lhs > rhs;
+  }
+};
 
 #endif

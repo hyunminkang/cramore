@@ -134,7 +134,7 @@ public:
   // parse contents
   bool parse_genotypes(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
   bool parse_likelihoods(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "PL");
-  bool parse_posteriors(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "GP", double gt_error = 1e-4);  
+  bool parse_posteriors(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "GP", double gt_error_offset = 1e-4);  
   bool parse_dosages(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "DS");
   bool parse_int_fields(const char* name, bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
   bool parse_float_fields(const char* name, bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);

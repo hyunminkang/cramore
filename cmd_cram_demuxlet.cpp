@@ -7,7 +7,9 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   SAMFilteredReader sr;
   BCFFilteredReader vr;
   std::string field("GP");
-  double genoError = 0.01;
+  double genoErrorOffset  = 0.10;
+  double genoErrorCoeffR2 = 0.00;
+  std::string r2Info("R2");
   std::string outPrefix;
   std::string plpPrefix;
   std::string tagGroup("CB");
@@ -25,7 +27,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   vr.vfilt.minMAC = 1;
   vr.vfilt.minCallRate = 0.5;
   vr.vfilt.maxAlleles = 2;  
-  bool writePair = false;
+  //bool writePair = false;
   //bool fullPair = true;
   double doublet_prior = 0.5;
   std::string groupList;
@@ -47,7 +49,9 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     LONG_PARAM_GROUP("Options for input VCF/BCF", NULL)
     LONG_STRING_PARAM("vcf",&vr.bcf_file_name, "Input VCF/BCF file, containing the individual genotypes (GT), posterior probability (GP), or genotype likelihood (PL)")
     LONG_STRING_PARAM("field",&field,"FORMAT field to extract the genotype, likelihood, or posterior from")
-    LONG_DOUBLE_PARAM("geno-error",&genoError,"Genotype error rate (must be used with --field GT)")
+    LONG_DOUBLE_PARAM("geno-error-offset",&genoErrorOffset,"Offset of genotype error rate. [error] = [offset] + [1-offset]*[coeff]*[1-r2]")
+    LONG_DOUBLE_PARAM("geno-error-coeff",&genoErrorCoeffR2,"Slope of genotype error rate. [error] = [offset] + [1-offset]*[coeff]*[1-r2]")
+    LONG_STRING_PARAM("r2-info",&r2Info,"INFO field name representing R2 value. Used for representing imputation quality")
     LONG_INT_PARAM("min-mac",&vr.vfilt.minMAC, "Minimum minor allele frequency")
     LONG_DOUBLE_PARAM("min-callrate",&vr.vfilt.minCallRate, "Minimum call rate")    
     LONG_MULTI_STRING_PARAM("sm",&smIDs, "List of sample IDs to compare to (default: use all)")
@@ -56,7 +60,6 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
     LONG_MULTI_DOUBLE_PARAM("alpha",&gridAlpha, "Grid of alpha to search for (default is 0.1, 0.2, 0.3, 0.4, 0.5)")
-    LONG_PARAM("write-pair",&writePair, "Writing the (HUGE) pair file")
     LONG_DOUBLE_PARAM("doublet-prior",&doublet_prior, "Prior of doublet")
     LONG_INT_PARAM("sam-verbose",&sr.verbose, "Verbose message frequency for SAM/BAM/CRAM")
     LONG_INT_PARAM("vcf-verbose",&vr.verbose, "Verbose message frequency for VCF/BCF")
@@ -81,15 +84,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
   if ( gridAlpha.empty() ) {
     gridAlpha.push_back(0);    
-    //gridAlpha.push_back(0.05);
-    //gridAlpha.push_back(0.1);
-    //gridAlpha.push_back(0.15);
-    //gridAlpha.push_back(0.2);
-    gridAlpha.push_back(0.25);        
-    //gridAlpha.push_back(0.3);
-    //gridAlpha.push_back(0.35);    
-    //gridAlpha.push_back(0.4);
-    //gridAlpha.push_back(0.45);    
+    //gridAlpha.push_back(0.25);        
     gridAlpha.push_back(0.5);    
   }
 
@@ -107,16 +102,16 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
   int32_t nv = vr.get_nsamples();
   double* gps = NULL;
-    
-  if ( !plpPrefix.empty() ) {
+
+  if ( !plpPrefix.empty() ) { // read from pileup
     //int nrd = 0;
     if ( !sr.sam_file_name.empty() ) {      
       error("with --plp option, neither --sam option cannot be used");
     }
 
-    scl.load_from_plp(plpPrefix.c_str(), &vr, field.c_str(), genoError);
+    scl.load_from_plp(plpPrefix.c_str(), &vr, field.c_str(), genoErrorOffset, genoErrorCoeffR2, r2Info.c_str());
   }
-  else {
+  else { // read BAM directly
     if ( !groupList.empty() ) {
       tsv_reader tsv_group_list(groupList.c_str());
       while( tsv_group_list.read_line() > 0 ) {
@@ -164,10 +159,12 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     std::vector<int32_t> snpids;
     //std::vector<int32_t> cellids;
 
+    // makr sure that the variant exists
     if ( !vr.read() )
       error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, vr.bcf_file_name.c_str());      
-    
-    if ( !vr.parse_posteriors(vr.cdr.hdr, vr.cursor(), field.c_str(), genoError) )
+
+    // make sure that the genotype field is parseable
+    if ( !vr.parse_posteriors(vr.cdr.hdr, vr.cursor(), field.c_str()) )
       error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(vr.cdr.hdr,vr.cursor()->rid), vr.cursor()->pos+1);
         
     // check if the chromosome names are in the same order between BCF and SAM
@@ -208,6 +205,9 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     kstring_t readqual = {0,0,0};
     
     int32_t nReadsMultiSNPs = 0, nReadsSkipBCD = 0, nReadsPass = 0, nReadsRedundant = 0, nReadsN = 0, nReadsLQ = 0, nReadsTMP = 0;
+
+    float* r2flts = NULL; // for extracting R2 fields..
+    int32_t n_r2flts = 0;    
     
     while( sr.read() ) { // read SAM file
       int32_t endpos = bam_endpos(sr.cursor());
@@ -225,13 +225,39 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       // add new snps
       while( ( !vr.eof ) && ( ( vr.cursor()->rid < tid2rid ) || ( ( vr.cursor()->rid == tid2rid ) && ( vr.cursor()->pos < endpos ) ) ) ) {
 	if ( vr.read() ) {
-	  if ( !vr.parse_posteriors(vr.cdr.hdr, vr.cursor(), field.c_str(), genoError) )
+	  if ( !vr.parse_posteriors(vr.cdr.hdr, vr.cursor(), field.c_str(), 0) )
 	    error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(vr.cdr.hdr,vr.cursor()->rid), vr.cursor()->pos+1);
 	  
 	  gps = new double[nv*3];
+	  double avgGPs[3] = {1e-10,1e-10,1e-10}; // represents empirical GP averages across samples	  
 	  for(int32_t i=0; i < nv * 3; ++i) {
-	    gps[i] = vr.get_posterior_at(i);
+	    avgGPs[i%3] += (gps[i] = vr.get_posterior_at(i));
 	  }
+	  // get average GPs to account for genoErrors
+	  double sumGP = avgGPs[0] + avgGPs[1] + avgGPs[2];
+	  avgGPs[0] /= sumGP;
+	  avgGPs[1] /= sumGP;
+	  avgGPs[2] /= sumGP;
+
+	  // account for genotype errors as [Offset] + [1-Offset]*[1-R2]*[Coeff]
+	  double err = genoErrorOffset;
+	  if ( genoErrorCoeffR2 > 0 ) { // look for R2 INFO field
+	    if ( ( bcf_get_info_float(vr.cdr.hdr, vr.cursor(), r2Info.c_str(), &r2flts, &n_r2flts) < 0 ) || ( n_r2flts != 1 ) ) {
+	      error("Cannot extract %s (1 float value) from INFO field at %s:%d. Cannot use --geno-error-coeff", r2Info.c_str(), bcf_hdr_id2name(vr.cdr.hdr,vr.cursor()->rid), vr.cursor()->pos+1);
+	    }
+	    err += (1-genoErrorOffset) * (1-r2flts[0]) * genoErrorCoeffR2;
+	  }
+
+	  if ( err > 0.999 ) err = 0.999;
+	  if ( err < 0 ) err = 0;
+	  
+	  if ( err > 0 ) { // if error is greater than zero, adjust it
+	    for(int32_t i=0; i < nv * 3; ++i) {
+	      gps[i] = (1-err) * gps[i] + err * avgGPs[ i % 3 ];
+	    }	    
+	  }
+	  
+	  
 	  snpid = scl.add_snp( vr.cursor()->rid, vr.cursor()->pos + 1, vr.cursor()->d.allele[0][0], vr.cursor()->d.allele[1][0], vr.get_af(1), gps);
 	  snpids.push_back(snpid);
 	}
@@ -338,6 +364,8 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       
       //if ( nv_valid > 0 ) ++scl.cell_totl_reads[ibcd];    
     }
+
+    free(r2flts);
     
     if ( n_warning_no_utag > 10 ) 
     notice("WARNING: Suppressed a total of %d UMI warnings...", n_warning_no_utag);
@@ -385,9 +413,8 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     if ( (int32_t)snpids.size() != scl.nsnps )
       error("[E:%s snpids.size() = %u != scl.nsnps = %d",__PRETTY_FUNCTION__, snpids.size(), scl.nsnps);
   }
-
-
-  // Calculate average genotype probability
+  
+  // Calculate average genotype probability for each SNP
   double* gp0s = (double*) calloc(scl.nsnps * 3, sizeof(double)); 
   for(int32_t i=0; i < scl.nsnps; ++i) {
     if ( scl.snps[i].gps != NULL ) {
@@ -401,16 +428,17 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       gp0s[i*3+2] /= nv;
     }
   }
-  
+
   // start evaluating genotype concordances
   // calculate for (nBcd) x (nInds) to find the best matching genotypes first
   notice("Starting to identify best matching individual IDs");
 
-  htsFile* wsingle = hts_open((outPrefix+".single").c_str(),"w");
+  //htsFile* wsingle = hts_open((outPrefix+".single").c_str(),"w");
 
-  if ( wsingle == NULL )
-    error("[E:%s:%d %s] Cannot create %s.single file",__FILE__,__LINE__,__FUNCTION__,outPrefix.c_str());
-  
+  //if ( wsingle == NULL )
+  //  error("[E:%s:%d %s] Cannot create %s.single file",__FILE__,__LINE__,__FUNCTION__,outPrefix.c_str());
+
+  /*
   std::vector<double> llks(scl.nbcs * nv, 0);
   std::vector<double> llk0s(scl.nbcs, 0);  
   double tmp;
@@ -425,6 +453,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
     double GLs[3];
 
+    // store llks[icell * nv + k] as matching likelihood for single individual
     for(it = cells.begin(); it != cells.end(); ++it) {
       GLs[0] = GLs[1] = GLs[2] = 1.0;
       for(sc_snp_droplet_it_t it2=it->second->begin(); it2 != it->second->end(); ++it2) {
@@ -463,15 +492,18 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       }
     }
   }
+  */
  
 
-  // find the best matching individual
+  // find the two best matching individuals
+  /*
+
   std::vector<int32_t> iBest(scl.nbcs,0);
   std::vector<int32_t> iNext(scl.nbcs,0);  
   std::vector<double> llkBest(scl.nbcs,0);
   notice("Identifying best-matching individual..");
 
-  hprintf(wsingle, "BARCODE\tSM_ID\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK1\tLLK0\tPOSTPRB\n");
+  //hprintf(wsingle, "BARCODE\tSM_ID\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK1\tLLK0\tPOSTPRB\n");
   int32_t i=0;
   for(std::map<std::string,int32_t>::iterator it = scl.bc_map.begin();
       it != scl.bc_map.end(); ++it) {
@@ -504,7 +536,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       }
     }
 
-    
+
     for(int32_t j=0; j < nv; ++j) {
       double curLLK = llks[it->second * nv + j];      
       hprintf(wsingle,"%s\t%s\t%d\t%d\t%d\t%d\t%.5lf\t%.5lf\t%.3lg\n",
@@ -518,7 +550,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	      llk0s[it->second],
 	      exp(curLLK-sumLLK)
 	      );
-    }
+    } 
     iBest[it->second] = imax;
     iNext[it->second] = inext;
     llkBest[it->second] = maxLLK;
@@ -528,16 +560,17 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       notice("Processing %d droplets...", i);
   }
   notice("Finished processing %d droplets total", i);  
-  hts_close(wsingle);
+  //hts_close(wsingle);
+  */
 
-  htsFile* wsing2 = hts_open((outPrefix+".sing2").c_str(),"w");
-  htsFile* wpair = (writePair ? hts_open((outPrefix+".pair").c_str(),"w") : NULL);
+  //htsFile* wsing2 = hts_open((outPrefix+".sing2").c_str(),"w");
+  //htsFile* wpair = (writePair ? hts_open((outPrefix+".pair").c_str(),"w") : NULL);
   htsFile* wbest = hts_open((outPrefix+".best").c_str(),"w");
 
-  hprintf(wsing2, "BARCODE\tSM_ID\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK1\tLLK0\tPOSTPRB\n");  
+  //hprintf(wsing2, "BARCODE\tSM_ID\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK1\tLLK0\tPOSTPRB\n");  
 
-  if ( ( writePair && wpair == NULL ) || ( wsingle == NULL ) )
-    error("[E:%s:%d %s] Cannot create %s.single, %s.pair files",__FILE__,__LINE__,__FUNCTION__,outPrefix.c_str(), outPrefix.c_str());
+  //if ( ( writePair && wpair == NULL ) || ( wsingle == NULL ) )
+  //  error("[E:%s:%d %s] Cannot create %s.single, %s.pair files",__FILE__,__LINE__,__FUNCTION__,outPrefix.c_str(), outPrefix.c_str());
 
 
   // start finding the next-best matching individual
@@ -551,7 +584,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
   //double** gpAB0 = new (double*)[ scl.nsnps ];
   //double *gpAB = NULL, *gpA0 = NULL, *gp00 = NULL;
-  int32_t j, k, l, m, n;  
+  int32_t i, j, k, l, m, n;  
   for(i=0; i < scl.nsnps; ++i) {
     //gpAB0[i] = new double[nv * nv * 9 + nv * 9 + 9];
     gps = scl.snps[i].gps;
@@ -574,42 +607,46 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 
   // iterate each barcode
   int32_t n1 = nv;
-  double* llksAB = new double[n1 * nv * nAlpha];
-  double* llksA0 = new double[nv * nAlpha];
-  double* llks00 = new double[nAlpha];
+  double* llksAB = new double[n1 * nv * nAlpha]; // pairwise doublet/singlet likelihood
+  double* llksA0 = new double[nv * nAlpha];      // half-specified doublet likelihood
+  double* llks00 = new double[nAlpha];           // unspecified doublet likelihood
   //double* postAB = new double[n1 * nv * nAlpha];  
 
-  if ( writePair )
-    hprintf(wpair,"BARCODE\tSM1.ID\tSM2.ID\tLLK12\tPOSTPRB\n");
-  hprintf(wbest,"BARCODE\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tBEST\tSNG.1ST\tSNG.LLK1\tSNG.2ND\tSNG.LLK2\tSNG.LLK0\tDBL.1ST\tDBL.2ND\tALPHA\tLLK12\tLLK1\tLLK2\tLLK10\tLLK20\tLLK00\tPRB.DBL\tPRB.SNG1\n");
+  //if ( writePair )
+  //  hprintf(wpair,"BARCODE\tSM1.ID\tSM2.ID\tLLK12\tPOSTPRB\n");
+  
+  //hprintf(wbest,"BARCODE\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tBEST\tSNG.1ST\tSNG.LLK1\tSNG.2ND\tSNG.LLK2\tSNG.LLK0\tDBL.1ST\tDBL.2ND\tALPHA\tLLK12\tLLK1\tLLK2\tLLK10\tLLK20\tLLK00\tPRB.DBL\tPRB.SNG1\n");
+  hprintf(wbest, "BARCODE\tNUM.SNPS\tNUM.READS\tDROPLET.TYPE\tBEST.GUESS\tBEST.LLK\tNEXT.GUESS\tNEXT.LLK\tDIFF.LLK.BEST.NEXT\tBEST.POSTERIOR\tSNG.POSTERIOR\tSNG.BEST.GUESS\tSNG.BEST.LLK\tSNG.NEXT.GUESS\tSNG.NEXT.LLK\tSNG.ONLY.POSTERIOR\tDBL.BEST.GUESS\tDBL.BEST.LLK\tDIFF.LLK.SNG.DBL\n");
+  
   //SINGLE.BEST.ID\tSINGLE.NEXT.ID\t
   //SM1.ID\tSM2.ID\tALPHA\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK12\tLLK1\tLLK0\tLLK10\tLLK00\tPOSTPRB\n");
 
   int ncells = 0;
+  // iterate across all possible droplets
   for(std::map<std::string,int32_t>::iterator it0 = scl.bc_map.begin(); it0 != scl.bc_map.end(); ++it0, ++ncells) {
     if ( ncells % 100 == 0 )
       notice("Demultiplexing %d droplets..", ncells);
     
     i = it0->second;
     if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUniqReads) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) continue;
-    
-    memset(llksAB,0,sizeof(double)*n1*nv*nAlpha);
-    //memset(postAB,0,sizeof(double)*n1*nv*nAlpha);    
-    memset(llksA0,0,sizeof(double)*nv*nAlpha);
-    memset(llks00,0,sizeof(double)*nAlpha);
 
+    memset(llksAB,0,sizeof(double)*n1*nv*nAlpha); // pairwise doublet/singlet likelihood
+    memset(llksA0,0,sizeof(double)*nv*nAlpha);    // half-unspecified double likelihood
+    memset(llks00,0,sizeof(double)*nAlpha);       // fully-unspecified double likelihood
+
+    // currently, compare with everyone
     int32_t jbeg = 0; //fullPair ? 0 : iBest[i];
     int32_t jend = nv; //fullPair ? nv : iBest[i]+1;
-    
+
+    // iterate across all possible snps
     std::map<int32_t,sc_snp_droplet_t*>& snps = scl.cell_umis[i];
     if ( snps.empty() ) continue;
     std::map<int32_t,sc_snp_droplet_t*>::iterator it;
     std::vector<double> pGs(nAlpha*9,1.0);
     for(it = snps.begin(); it != snps.end(); ++it) {
-
       std::fill(pGs.begin(),pGs.end(),1.0);
       
-      // calculate genotype likelihoods
+      // calculate genotype likelihoods for the SNP
       for(sc_snp_droplet_it_t it2=it->second->begin(); it2 != it->second->end(); ++it2) {
 	uint8_t al = (it2->second >> 24) & 0x00ff;
 	uint8_t bq = (it2->second >> 16) & 0x00ff;
@@ -651,6 +688,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	  }
 	}
       }
+      // now pG[k*9 + l*3 + m] = Pr(Data|g1=l,g2=m,alpha=gridAlpha[k])
 
       // add marginal probability in genotype likelihood
       double maxpG = 0;
@@ -659,13 +697,14 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	for(int32_t l=0; l < 3; ++l) {   // 1-Alpha
 	  for(int32_t m=0; m < 3; ++m) { // Alpha
 	    double& pG = pGs[k*9 + l*3 + m];
-	    pG += 1e-6;
+	    pG += 1e-10;
 	    if ( maxpG < pG )
 	      maxpG = pG;	    
 	  }
 	}
       }
-      
+
+      // normalize the likelihoods
       for(int32_t k=0; k < nAlpha; ++k) {
 	// normalize
 	for(int32_t l=0; l < 3; ++l) {   // 1-Alpha
@@ -681,27 +720,24 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       double p;
       int32_t j, k, l, m, n;
 
-      if ( scl.snps[isnp].gps != NULL ) {
-	for(j=jbeg; j < jend; ++j) {
+      if ( scl.snps[isnp].gps != NULL ) { // skip if the marker does not have genotypes
+	for(j=jbeg; j < jend; ++j) {  // j is the intended sample
 	  // pairwise LLK
-	  for(k=0; k < nv; ++k) {
-	    std::fill(sumPs.begin(), sumPs.end(), 0);
+	  for(k=0; k < nv; ++k) {     // k is the contaminating sample
+	    std::fill(sumPs.begin(), sumPs.end(), 0); // for computing llksAB
 	    for(l=0; l < 3; ++l) {
 	      for(m=0; m < 3; ++m) {
-		//gps = scl.snps[i].gps;	      
-		//p = gpAB[isnp*nv*nv*9 + j*nv*9 + k*9 + l*3 + m];
-		//gpAB[i*nv*nv*9 + j*nv*9 + k*9 + l*3 + m] = gps[j*3+l] * gps[k*3+m];	      
 		p = scl.snps[isnp].gps[j*3+l] * scl.snps[isnp].gps[k*3+m]; 
 		for(n=0; n < nAlpha; ++n) 
-		  sumPs[n] += (p * pGs[n*9+l*3+m]);
+		  sumPs[n] += (p * pGs[n*9+l*3+m]); // sumP is the per-SNP likelihood
 	      }
 	    }
 	    for(n=0; n < nAlpha; ++n)
-	      llksAB[(j-jbeg)*nv*nAlpha + k*nAlpha + n] += log(sumPs[n]);
+	      llksAB[(j-jbeg)*nv*nAlpha + k*nAlpha + n] += log(sumPs[n]); 
 	  }
 	  
 	  // A0 LLK
-	  std::fill(sumPs.begin(), sumPs.end(), 0);
+	  std::fill(sumPs.begin(), sumPs.end(), 0); // for computing llksA0
 	  for(l=0; l < 3; ++l) {
 	    for(m=0; m < 3; ++m) {
 	      //p = gpA0[isnp*nv*9 + j*9 + l*3 + m];
@@ -714,8 +750,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	    llksA0[(j-jbeg)*nAlpha + n] += log(sumPs[n]);	
 	}
 
-	// 00 LLK
-	std::fill(sumPs.begin(), sumPs.end(), 0);
+	std::fill(sumPs.begin(), sumPs.end(), 0); // for computing llks00
 	for(l=0; l < 3; ++l) {
 	  for(m=0; m < 3; ++m) {
 	    //p = gp00[isnp*9 + l*3 + m];
@@ -727,47 +762,71 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	for(n=0; n < nAlpha; ++n)
 	  llks00[n] += log(sumPs[n]);
       }
-    }
+    } // finished calculating genotype likelihoods
 
     // normalize by max likelihood
-    double maxLLK = -1e300;
-    for(j=jbeg; j < jend; ++j) {
-      for(k=0; k < nv; ++k) {
-	for(n=0; n < nAlpha; ++n) {
-	  if ( maxLLK < llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] )
-	    maxLLK = llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n];
-	}
-      }
-    }
+    //double maxLLK = -1e300;
+    //for(j=jbeg; j < jend; ++j) {
+    //  for(k=0; k < nv; ++k) {
+    //for(n=0; n < nAlpha; ++n) {
+    //	  if ( maxLLK < llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] )
+    //	    maxLLK = llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n];
+    //	}
+    //  }
+    //}
 
-    // calculate posterior probability
-    double sumSingle = 0, sumDouble = 0;
+    int32_t sBest = -1, sNext = -1, dBest1 = -1, dBest2 = -1, dNext1 = -1, dNext2 = -1, dblBestAlpha = -1, dblNextAlpha = -1;    
+    double sngBestLLK = -1e300, sngNextLLK = -1e300;
+    double dblBestLLK = -1e300, dblNextLLK = -1e300;
+    double sumLLK = -1e-300, sngLLK = -1e-300;
+    double bestPP = -1e300, sngPP = -1e300, sngOnlyPP = -1e300;
+    double log_single_prior = log((1.0-doublet_prior)/nv); 
+    double log_doublet_prior1 = log(doublet_prior/nv/(nv-1.)/(nAlpha-1.));
+    double log_doublet_prior2 = log(doublet_prior/nv/(nv-1.)/(nAlpha-1.)*2);    
+    //double log_doublet_prior = log(doublet_prior/nSamples/(nSamples-1)/(nAlpha-1)*2);
+
+
+    // llksAB[(j-jbeg)*nv*nAlpha + ANY*nAlpha + 0] -- singlet likelihood
+    // llksAB[(j-jbed)*nv*nAlpha + k*nAlpha + n]   -- doublet likelihood
+
+    // calculate posterior probability of singlets and doublets
+    //double sumSingle = 0, sumDouble = 0;
     for(j=jbeg; j < jend; ++j) {
-      sumSingle += (exp(llksAB[(j-jbeg)*nv*nAlpha] - maxLLK)* (1.-doublet_prior) / (jend-jbeg));
+      //sumSingle += (exp(llksAB[(j-jbeg)*nv*nAlpha] - maxLLK)* (1.-doublet_prior) / (jend-jbeg));
+      sumLLK = logAdd(sumLLK, llksAB[(j-jbeg)*nv*nAlpha] + log_single_prior);
+      sngLLK = logAdd(sngLLK, llksAB[(j-jbeg)*nv*nAlpha] + log_single_prior);      
       
       for(k=0; k < nv; ++k) {
-	if ( j == k ) continue;
+	if ( j == k ) continue; // singlets
 	for(n=1; n < nAlpha; ++n) {
-	    sumDouble += ( exp(llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] - maxLLK)* doublet_prior / (jend-jbeg) / (nv-1) / (nAlpha-1) / (gridAlpha[n] == 0.5 ? 2.0 : 1.0));
+	  if ( gridAlpha[n] == 0.5 ) {
+	    if ( k > j ) continue;
+	    sumLLK = logAdd(sumLLK, llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] + log_doublet_prior2);
+	  }
+	  else
+	    sumLLK = logAdd(sumLLK, llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] + log_doublet_prior1);	    
+	  //sumDouble += ( exp(llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] - maxLLK)* doublet_prior / (jend-jbeg) / (nv-1) / (nAlpha-1) / (gridAlpha[n] == 0.5 ? 2.0 : 1.0));
 	}
       }
     }
 
-    int32_t iSing1 = -1, iSing2 = -1;
-    double maxSing1 = -1e300, maxSing2 = -1e300;
+    //int32_t iSing1 = -1, iSing2 = -1;
+    //double maxSing1 = -1e300, maxSing2 = -1e300;
+
+    // scan for best-matching singlets
     for(j=jbeg; j < jend; ++j) {
-      if ( maxSing1 < llksAB[(j-jbeg)*nv*nAlpha] ) {
-	maxSing2 = maxSing1;
-	iSing2 = iSing1;
-	iSing1 = j;
-	maxSing1 = llksAB[(j-jbeg)*nv*nAlpha];
+      if ( sngBestLLK < llksAB[(j-jbeg)*nv*nAlpha] ) {
+	sngNextLLK = sngBestLLK;
+	sNext = sBest;
+	sBest = j;
+	sngBestLLK = llksAB[(j-jbeg)*nv*nAlpha];
       }
-      else if ( maxSing2 < llksAB[(j-jbeg)*nv*nAlpha] ) {
-	iSing2 = j;
-	maxSing2 = llksAB[(j-jbeg)*nv*nAlpha];	
+      else if ( sngNextLLK < llksAB[(j-jbeg)*nv*nAlpha] ) {
+	sNext = j;
+	sngNextLLK = llksAB[(j-jbeg)*nv*nAlpha];	
       }
       
-      hprintf(wsing2,"%s\t%s\t%d\t%d\t%d\t%d\t%.4lf\t%.4lf\t%.3lg\n",
+      /* hprintf(wsing2,"%s\t%s\t%d\t%d\t%d\t%d\t%.4lf\t%.4lf\t%.3lg\n",
 	      it0->first.c_str(),
 	      vr.get_sample_id_at(j),	    	      
 	      scl.cell_totl_reads[i],
@@ -776,9 +835,10 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	      (int32_t)scl.cell_umis[i].size(),
 	      llksAB[(j-jbeg)*nv*nAlpha],
 	      llks00[0],
-	      exp(llksAB[(j-jbeg)*nv*nAlpha]-maxLLK) * (1.-doublet_prior) / (jend-jbeg) / sumSingle);
+	      exp(llksAB[(j-jbeg)*nv*nAlpha]-maxLLK) * (1.-doublet_prior) / (jend-jbeg) / sumSingle); */
     }    
 
+    /*
     if ( writePair )  {
       for(j=jbeg; j < jend; ++j) {
 	hprintf(wpair,"%s\t%s\t%s\t%.3lf\t%.5lf\t%.5lg\n",
@@ -805,40 +865,143 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	}
       }
     }
+    */
 
-    int jBest = -1, kBest = -1, alphaBest = -1;
-    double maxAB = -1e300;
+    //int jBest = -1, kBest = -1, alphaBest = -1;
+    //double maxAB = -1e300;
 
     for(j=jbeg; j < jend; ++j) {
       for(k=0; k < nv; ++k) {
 	if ( j == k ) continue;
 	for(n=1; n < nAlpha; ++n) {
-	  if ( maxAB < llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] ) {
-	    jBest = j;
-	    kBest = k;
-	    alphaBest = n;
-	    maxAB = llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n];
+	  if ( dblBestLLK < llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] ) {
+	    dNext1 = dBest1;
+	    dNext2 = dBest2;
+	    dblNextAlpha = dblBestAlpha;
+	    dblNextLLK  = dblBestLLK; 
+	    
+	    dBest1 = j;
+	    dBest2 = k;
+	    dblBestAlpha = n;
+	    dblBestLLK = llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n];
+	  }
+	  else if ( dblNextLLK < llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n] ) {
+	    dNext1 = j;
+	    dNext2 = k;
+	    dblNextAlpha = n;
+	    dblNextLLK = llksAB[(j-jbeg)*nv*nAlpha+k*nAlpha+n];	    
 	  }
 	}
       }
     }
 
-    double singLLK1  = llksAB[(iSing1-jbeg)*nv*nAlpha];
-    double singLLK2  = llksAB[(iSing2-jbeg)*nv*nAlpha];    
+    //double singLLK1  = llksAB[(iSing1-jbeg)*nv*nAlpha];
+    //double singLLK2  = llksAB[(iSing2-jbeg)*nv*nAlpha];    
     //double singLLK1  = llksAB[(iBest[i]-jbeg)*nv*nAlpha];
     //double singLLK2  = llksAB[(iNext[i]-jbeg)*nv*nAlpha];
-    double singLLK0  = llks00[0];
-    double pairLLK12 = llksAB[(jBest-jbeg)*nv*nAlpha+kBest*nAlpha+alphaBest];
-    double pairLLK1  = llksAB[(jBest-jbeg)*nv*nAlpha];
-    double pairLLK2  = llksAB[(kBest-jbeg)*nv*nAlpha];
-    double pairLLK10 = llksAB[(jBest-jbeg)*nv*nAlpha+alphaBest];
-    double pairLLK20 = llksAB[(kBest-jbeg)*nv*nAlpha+alphaBest];        
-    double pairLLK00 = llks00[alphaBest];
-    double postDoublet = sumDouble/(sumSingle+sumDouble);
-    double postSinglet = exp(singLLK1 - maxLLK) * (1.-doublet_prior) / (jend-jbeg) / sumSingle;
+    //double singLLK0  = llks00[0];
+    //double pairLLK12 = llksAB[(jBest-jbeg)*nv*nAlpha+kBest*nAlpha+alphaBest];
+    //double pairLLK1  = llksAB[(jBest-jbeg)*nv*nAlpha];
+    //double pairLLK2  = llksAB[(kBest-jbeg)*nv*nAlpha];
+    //double pairLLK10 = llksAB[(jBest-jbeg)*nv*nAlpha+alphaBest];
+    //double pairLLK20 = llksAB[(kBest-jbeg)*nv*nAlpha+alphaBest];        
+    //double pairLLK00 = llks00[alphaBest];
+    //double postDoublet = sumDouble/(sumSingle+sumDouble);
+    //double postSinglet = exp(singLLK1 - maxLLK) * (1.-doublet_prior) / (jend-jbeg) / sumSingle;
+    std::string bestType, nextType;
+    int32_t jBest = -1, kBest = -1, jNext = -1, kNext = -1, alphaBest = -1, alphaNext = -1;
+    double bestLLK = -1e300, nextLLK = -1e300;
+    
+    if ( dblBestLLK > sngBestLLK + 2 ) { // bestcall is doublet
+      bestType = "DBL";
+      bestPP = exp(dblBestLLK + ( ( gridAlpha[dblBestAlpha] == 0.5 ) ? log_doublet_prior2 : log_doublet_prior1 ) - sumLLK);
+      jBest = dBest1;
+      kBest = dBest2;
+      bestLLK = dblBestLLK;
+      alphaBest = dblBestAlpha;
 
-    hprintf(wbest,"%s\t%d\t%d\t%d\t%d\t",
+      if ( dblNextLLK > sngBestLLK + 2 ) {
+	nextType = "DBL";
+	jNext = dNext1;
+	kNext = dNext2;
+	nextLLK = dblNextLLK;
+	alphaNext = dblNextAlpha;
+      }
+      else {
+	nextType = "SNG";
+	jNext = kNext = sBest;
+	nextLLK = sngBestLLK;
+	alphaNext = 0;
+      }
+    }
+    else if ( sngBestLLK > sngNextLLK + 2 ) {
+      bestType = "SNG";
+      bestPP = sngBestLLK + log_single_prior - sumLLK;
+      jBest = kBest = sBest;
+      bestLLK = sngBestLLK;
+      alphaBest = 0;
+
+      if ( dblBestLLK > sngNextLLK + 2 ) {
+	nextType = "DBL";
+	jNext = dBest1;
+	kNext = dBest2;
+	nextLLK = dblBestLLK;
+	alphaNext = dblBestAlpha;	
+      }
+      else {
+	nextType = "SNG";
+	jNext = kNext = sNext;
+	nextLLK = sngNextLLK;
+	alphaNext = 0;	
+      }
+    }
+    else {
+      bestType = "AMB";
+      bestPP = sngBestLLK + log_single_prior - sumLLK;
+      jBest = kBest = sBest;
+      bestLLK = sngBestLLK;
+      alphaBest = 0;
+
+      if ( dblBestLLK > sngNextLLK + 2 ) {
+	nextType = "DBL";
+	jNext = dBest1;
+	kNext = dBest2;
+	nextLLK = dblBestLLK;
+	alphaNext = dblBestAlpha;	
+      }
+      else {
+	nextType = "SNG";
+	jNext = kNext = sNext;
+	nextLLK = sngNextLLK;
+	alphaNext = 0;	
+      }      
+    }
+
+    sngPP = exp(sngLLK - sumLLK);
+    sngOnlyPP = exp(sngBestLLK + log_single_prior - sngLLK);
+
+    hprintf(wbest, "%s\t%u\t%d\t%s\t%s,%s,%.2lf\t%.2lf\t%s,%s,%.2lf\t%.2lf\t%.2lg\t%.2lg\t%s\t%.2lf\t%s\t%.2lf\t%.5lf\t%s,%s,%.2lf\t%.2lf\t%.2lf\n", 
 	    it0->first.c_str(),
+	    scl.cell_umis[i].size(),
+	    scl.cell_uniq_reads[i],
+	    bestType.c_str(),
+	    vr.get_sample_id_at(jBest), vr.get_sample_id_at(kBest), gridAlpha[alphaBest],
+	    bestLLK,
+	    vr.get_sample_id_at(jNext), vr.get_sample_id_at(kNext), gridAlpha[alphaNext],
+	    bestLLK - nextLLK,
+	    bestPP,
+	    sngPP,
+	    vr.get_sample_id_at(sBest),
+	    sngBestLLK,
+	    vr.get_sample_id_at(sNext),
+	    sngNextLLK,
+	    sngOnlyPP,
+	    vr.get_sample_id_at(dBest1), vr.get_sample_id_at(dBest2), gridAlpha[dblBestAlpha],
+	    dblBestLLK,
+	    sngBestLLK - dblBestLLK);    
+
+    /*hprintf(wbest,"%s\t%d\t%d\t%d\t%d\t",
+    it0->first.c_str(),
 	    scl.cell_totl_reads[i],
 	    scl.cell_pass_reads[i],
 	    scl.cell_uniq_reads[i],
@@ -881,13 +1044,13 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	    pairLLK20,
 	    pairLLK00,
 	    postDoublet,
-	    postSinglet);
+	    postSinglet); */
   }
   notice("Finished writing output files");
 
-  if ( writePair ) hts_close(wpair);
+  //if ( writePair ) hts_close(wpair);
   hts_close(wbest);
-  hts_close(wsing2);  
+  //hts_close(wsing2);  
 
   return 0; 
 }

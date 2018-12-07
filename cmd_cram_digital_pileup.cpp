@@ -417,7 +417,7 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
 
   notice("Writing cell information");
   std::vector<std::string> v_bcs(scl.bc_map.size());
-  hprintf(wC, "#DROPLET_ID\tBARCODE\tNUM.READ\tNUM.UMI\tNUM.SNP\n");
+  hprintf(wC, "#DROPLET_ID\tBARCODE\tNUM.READ\tNUM.UMI\tNUM.UMIwSNP\tNUM.SNP\n");
   for(std::map<std::string,int32_t>::iterator it = scl.bc_map.begin(); it != scl.bc_map.end(); ++it) {
     if ( !v_bcs[it->second].empty() )
       error("Duplicate position for barcode %s at %d", it->first.c_str(), it->second);
@@ -425,7 +425,12 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
     //hprintf(wC, "%s\t%d\n", it->first.c_str(), it->second);
   }
   for(int32_t i=0; i < (int32_t)v_bcs.size(); ++i) {
-    hprintf(wC, "%d\t%s\t%d\t%d\t%u\n", i, v_bcs[i].c_str(), scl.cell_totl_reads[i], scl.cell_uniq_reads[i], scl.cell_umis[i].size());
+    if ( !skipUmiFlag ) {
+      hprintf(wC, "%d\t%s\t%d\t%u\t%d\t%u\n", i, v_bcs[i].c_str(), scl.cell_totl_reads[i], umiLoci[i].size(), scl.cell_uniq_reads[i], scl.cell_umis[i].size());
+    }
+    else {
+      hprintf(wC, "%d\t%s\t%d\t.\t%d\t%u\n", i, v_bcs[i].c_str(), scl.cell_totl_reads[i], scl.cell_uniq_reads[i], scl.cell_umis[i].size());      
+    }
   }
   v_bcs.clear();
   notice("Finished writing cell information");
@@ -435,16 +440,15 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
   //size_t k;
   int32_t i;
 
-
   if ( !skipUmiFlag ) {
     htsFile* wU = hts_open((outPrefix+".umi.gz").c_str(),"wg");
     if ( wU == NULL )
       error("[E:%s:%d %s] Cannot create %s.umi.gz file",__FILE__,__LINE__,__FUNCTION__,outPrefix.c_str());
     
-    for(i=1; i < (int32_t)umiLoci.size(); ++i) {
+    for(i=0; i < (int32_t)umiLoci.size(); ++i) {  // for each cell barcode, print the number of distinct UMIs
       for(std::map<std::string, genomeLoci>::iterator itu = umiLoci[i].begin();
 	  itu != umiLoci[i].end(); ++itu) {
-	if ( !itu->second.empty() ) {
+	if ( !itu->second.empty() ) { 
 	  //itu->second.resolveOverlaps();
 	  //notice("%d\t%s", i ,itu->first.c_str());	
 	  hprintf(wU, "%d\t%s\t%u", i, itu->first.c_str(), itu->second.totalLength());

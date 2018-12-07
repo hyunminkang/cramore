@@ -40,6 +40,7 @@ noinst_HEADERS = hDist.h \
 	bcf_variant_key.h bcf_filter_arg.h discrete_log_helper.h \
 	var_dict.h \
 	louvain.h \
+	gtf_interval_tree.h \
 	$(EIGEN_HEADER_FILES)
 
 bin_PROGRAMS = cramore
@@ -81,6 +82,8 @@ cramore_SOURCES = cramore.cpp \
 	cmd_vcf_paste_calls.cpp cmd_vcf_merge_candidate_variants.cpp \
 	cmd_cram_update_rg.cpp cmd_cram_gtf_util.cpp gtf.cpp \
 	cmd_cram_digital_pileup.cpp \
-	cmd_cram_freemuxlet.cpp 
+	cmd_cram_freemuxlet.cpp \
+	cmd_plp_make_dge_matrix.cpp \
+	cmd_plp_find_mux_clust.cpp
 
 cramore_LDADD = $(ALL_LDFLAGS) $(HTSLIB_LIB) $(ALL_LIBS)

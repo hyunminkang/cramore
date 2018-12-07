@@ -22,6 +22,7 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
   bool siteOnly = false;
   bool nelderMead = false;
   bool lrtTest  = false;
+  bool lrtEM    = false;  
   std::string field;
   double gtError = 0.005;
   double maxLambda = 1.0;
@@ -48,7 +49,8 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
     LONG_PARAM("skip-info", &skipInfo,   "Skip updating INFO field for each sample in output VCF/BCF")
     LONG_PARAM("site-only", &siteOnly,   "Do not write genotype information, and writes only site information (up to INFO field) in output VCF/BCF")
     LONG_PARAM("nelder-mead", &nelderMead,   "Use Nelder-Mead algorithm (instead of EM) when estimating individual-specific allele frequencies")
-    LONG_PARAM("lrt-test", &lrtTest,   "Use Likelihood-ratio test with Nelder-Mead algorithm (instead of score test) for performing HWE test")    
+    LONG_PARAM("lrt-test", &lrtTest,   "Use Likelihood-ratio test with Nelder-Mead algorithm (instead of score test) for performing HWE test")
+    LONG_PARAM("lrt-em", &lrtEM,   "Use Likelihood-ratio test with EM algorithm (instead of score test) for performing HWE test")        
 
     LONG_PARAM_GROUP("Samples to focus on",NULL)
     //LONG_STRING_PARAM("sm",&smID, "Sample ID to subset from VCF/BCF when estimating ISAF. HWE statistics would not be meaningful in this case")
@@ -78,6 +80,10 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
   // sanity check of input arguments
   if ( outVcf.empty() || evecFile.empty() || bfr.bcf_file_name.empty() ) {
     error("[E:%s:%d %s] --evec, --out, --vcf are required parameters",__FILE__,__LINE__,__PRETTY_FUNCTION__);
+  }
+
+  if ( lrtTest + lrtEM + nelderMead > 1 ) {
+    error("Options --lrt-test, --lrt-em, and --nelder-mead are exclusive and cannot be used together");
   }
 
   srand(seed ? seed : std::time(NULL));
@@ -180,6 +186,8 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
     //freqest.estimate_isaf_em();
     if ( lrtTest )
       freqest.estimate_isaf_lrt();
+    else if ( lrtEM )
+      freqest.estimate_isaf_em_hwd();      
     else
       freqest.score_test_hwe(true);
     freqest.update_variant();

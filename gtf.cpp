@@ -26,7 +26,7 @@ gtfCDS::gtfCDS(int32_t _start, int32_t _end, const char* sframe, gtfElement* _pa
      error("[E:%s:%d:%s] Unrecognized frame string %s", __FILE__, __LINE__, __PRETTY_FUNCTION__, sframe);
 }
 
-gtf::gtf(const char* filename) :
+gtf::gtf(const char* filename, bool proteinCodingOnly, bool addChrPrefix, bool removeChrPrefix) :
   maxGeneLength(0), maxTranscriptLength(0), maxExonLength(0),
   maxCDSLength(0), maxUTRLength(0), maxStartCodonLength(0),
   maxStopCodonLength(0)
@@ -38,22 +38,54 @@ gtf::gtf(const char* filename) :
   // read each line
   notice("Started reading GTF file %s...", filename);
   int32_t line = 0;
+  char seqname[65535];
+  //int32_t nwarnings = 0;
   for( line = 0; ( nfields = tr.read_line() ) > 0; ++line) {
     if ( line % 1000000 == 0 )
       notice("Reading line %d from %s...", line, filename);
+
+    // Process chromosome name
+    const char* tmp_seqname = tr.str_field_at(0);    
+    if ( tmp_seqname[0] == '#' ) continue; // ignore meta lines
+    if ( addChrPrefix ) {
+      if ( strncmp(tmp_seqname,"chr",3) == 0 )
+	error("--gtf-add-chr option is on, but chr is already included in the chromosome name");
+      seqname[0] = 'c'; seqname[1] = 'h'; seqname[2] = 'r';
+      strcpy(seqname+3, tmp_seqname);
+    }
+    else if ( removeChrPrefix ) {
+      if ( strncmp(tmp_seqname,"chr",3) == 0 ) {
+	strcpy(seqname, tmp_seqname+3);
+      }
+      else {
+	//if ( nwarnings < 10 ) 
+	//warning("--gtf-remove-chr option is on, but the chromosome name does %s not start with chr. Including the entry without chr prefix", tmp_seqname);
+	//++nwarnings;	
+	//if ( nwarnings == 10 )
+	//warning("10 warnings in same kind were observed. Supressing further warnings...");
+	strcpy(seqname, tmp_seqname);	
+      }
+    }
+    else {
+      strcpy(seqname, tmp_seqname);
+    }
     
-    const char* seqname = tr.str_field_at(0);    
-    // ignore meta lines
-    if ( seqname[0] == '#' ) continue;    
     if ( nfields != 9 )
       error("The number of fields are not exactly 9\n%s", tr.str.s);
+
     // const char* source  = tr.str_field_at(1);
     const char* feature = tr.str_field_at(2);
-    int32_t start       = tr.int_field_at(3);
-    int32_t end         = tr.int_field_at(4); // gtf is 1-inclusive        
+    int32_t start       = tr.int_field_at(3);  // gtf beg is 1-inclusive
+    int32_t end         = tr.int_field_at(4);  // gtf end is 1-inclusive
     const char* strand  = tr.str_field_at(6);
     const char* frame   = tr.str_field_at(7);
     const char* attr    = tr.str_field_at(8);
+
+    if ( proteinCodingOnly ) {
+      // search for gene_type "protein_coding"
+      const char* pFind = strstr(attr, "gene_type \"protein_coding\"");
+      if ( pFind == NULL ) continue;
+    }    
 
     // tokenize the attrbute string
     int32_t  nattrs = 0;
@@ -162,7 +194,20 @@ gtf::gtf(const char* filename) :
 
     //notice("end of loop");    
   }
-  notice("Finished reading %d lines from %s", line, filename);  
+  notice("Finished reading %d lines from %s", line, filename);
+
+  notice("Building interval trees for each contig..");
+  for(gtf_chr_it_t it = mmap.begin(); it != mmap.end(); ++it) {
+    notice("Processing contig %s", it->first.c_str());
+    gtf_ivt_t::gtf_interval_vector itvs;
+    for(gtf_elem_it_t jt = it->second.begin(); jt != it->second.end(); ++jt) {
+      itvs.emplace_back(jt->first.beg1, jt->first.end0, jt->second);
+    }
+    //gtf_ivt_t newTree;
+    //newTree = gtfIntervalTree<int32_t,gtfElement*>(itvs);
+    //gtf_ivt_t::gtf_interval_vector& ritvs = itvs;
+    chr2ivt[it->first] = gtf_ivt_t(std::move(itvs)); // std::move is necessary here
+  }
 }
 
 gtf::~gtf() {
@@ -205,6 +250,8 @@ bool gtf::addGene(const char* seqname, int32_t start, int32_t end,
   gid2Gene[gid] = pGene;
   // add the entry to the element map
   mmap[seqname].emplace(pGene->locus,pGene);
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pGene));
+  
   maxGeneLength = maxGeneLength > pGene->locus.length() ? maxGeneLength : pGene->locus.length();
 
   //notice("Added gene %s", gid.c_str());
@@ -238,6 +285,7 @@ bool gtf::addTranscript(const char* seqname, int32_t start, int32_t end,
   
   // add the entry to the element map
   mmap[seqname].emplace( pTranscript->locus, pTranscript );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pTranscript));  
   maxTranscriptLength = maxTranscriptLength > pTranscript->locus.length() ? maxTranscriptLength : pTranscript->locus.length();
 
   //notice("Added transcript %s", tid.c_str());  
@@ -262,6 +310,7 @@ bool gtf::addExon(const char* seqname, int32_t start, int32_t end,
 
   // add the entry to the element map
   mmap[seqname].emplace( pExon->locus, pExon );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pExon));    
   maxExonLength = maxExonLength > pExon->locus.length() ? maxExonLength : pExon->locus.length();    
 
   return checkTranscriptSanity(tid, seqname, strand);      
@@ -284,6 +333,7 @@ bool gtf::addUTR(const char* seqname, int32_t start, int32_t end,
 
   // add the entry to the element map
   mmap[seqname].emplace( pUTR->locus, pUTR );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pExon));
   maxUTRLength = maxUTRLength > pUTR->locus.length() ? maxUTRLength : pUTR->locus.length();    
 
   return checkTranscriptSanity(tid, seqname, strand);      
@@ -307,6 +357,7 @@ bool gtf::addCDS(const char* seqname, int32_t start, int32_t end,
 
   // add the entry to the element map
   mmap[seqname].emplace( pCDS->locus, pCDS );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pCDS));  
   maxCDSLength = maxCDSLength > pCDS->locus.length() ? maxCDSLength : pCDS->locus.length();    
 
   return checkTranscriptSanity(tid, seqname, strand);      
@@ -330,6 +381,7 @@ bool gtf::addStartCodon(const char* seqname, int32_t start, int32_t end,
 
   // add the entry to the element map
   mmap[seqname].emplace( pElement->locus, pElement );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pElement));  
   maxStartCodonLength = maxStartCodonLength > pElement->locus.length() ? maxStartCodonLength : pElement->locus.length();    
 
   return checkTranscriptSanity(tid, seqname, strand);
@@ -353,6 +405,7 @@ bool gtf::addStopCodon(const char* seqname, int32_t start, int32_t end,
 
   // add the entry to the element map
   mmap[seqname].emplace( pElement->locus, pElement );
+  //chr2ivt[seqname].push_back(gtf_iv_t(start, end, pElement));  
   maxStopCodonLength = maxStopCodonLength > pElement->locus.length() ? maxStopCodonLength : pElement->locus.length();    
 
   return checkTranscriptSanity(tid, seqname, strand);
@@ -403,5 +456,24 @@ bool gtf::next() {
     return true;
 }
 
-//virtual void gtfElement::printElement() {
-//}
+int32_t gtf::findOverlappingElements(const char* seqname, int32_t start, int32_t end, std::set<gtfElement*>& results) {
+  std::map<std::string, gtf_ivt_t>::iterator chr2ivt_it_t = chr2ivt.find(seqname);  
+  if ( chr2ivt_it_t == chr2ivt.end() ) {
+    notice("WARNING: no overlapping elements in %s", seqname);
+    return 0;
+  }
+  gtf_ivt_t::gtf_interval_vector overlaps = chr2ivt_it_t->second.findOverlapping(start, end);
+  for(int32_t i=0; i < (int32_t)overlaps.size(); ++i) {
+    const gtf_ivt_t::gtf_interval& iv = overlaps[i];
+    results.insert(iv.value);
+    /*
+    gtfElement* e = iv.value;
+    gtfElement* root = e;
+    while( root->parent != NULL )
+      root = root->parent;
+    gtfGene* rootGene = (gtfGene*)root;
+    notice("Query = %s:%d-%d, Found %s:%d-%d, Type = %s, Gene ID = %s, Gene Name = %s, Gene Type = %s", seqname, start, end, seqname, iv.start, iv.stop, e->type.c_str(), rootGene->geneId.c_str(), rootGene->geneName.c_str(), rootGene->geneType.c_str());
+    */
+  }
+  return 0;
+}

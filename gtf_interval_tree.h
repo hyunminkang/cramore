@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2011 Erik Garrison <erik.garrison@gmail.com> and Hyun Min Kang (hmkang@umich.edu)
+   Copyright (c) 2011 Erik Garrison <erik.garrison@gmail.com>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -86,8 +86,8 @@ public:
 
     ~gtfIntervalTree() = default;
 
-    std::unique_ptr<IntervalTree> clone() const {
-        return std::unique_ptr<IntervalTree>(new gtfIntervalTree(*this));
+    std::unique_ptr<gtfIntervalTree> clone() const {
+        return std::unique_ptr<gtfIntervalTree>(new gtfIntervalTree(*this));
     }
 
     gtfIntervalTree(const gtfIntervalTree& other)
@@ -206,8 +206,8 @@ public:
     // Call f on all intervals overlapping [start, stop]
     template <class UnaryFunction>
     void visit_overlapping(const Scalar& start, const Scalar& stop, UnaryFunction f) const {
-        auto filterF = [&](const interval& interval) {
-            if (gtf_interval.stop >= start && gtf_interval.start <= stop) {
+        auto filterF = [&](const gtf_interval& interval) {
+            if (interval.stop >= start && interval.start <= stop) {
                 // Only apply f if overlapping
                 f(interval);
             }
@@ -226,19 +226,19 @@ public:
         visit_near(start, stop, filterF);
     }
 
-    interval_vector findOverlapping(const Scalar& start, const Scalar& stop) const {
-        interval_vector result;
+    gtf_interval_vector findOverlapping(const Scalar& start, const Scalar& stop) const {
+        gtf_interval_vector result;
         visit_overlapping(start, stop,
-                          [&](const interval& interval) { 
+                          [&](const gtf_interval& interval) { 
                             result.emplace_back(interval); 
                           });
         return result;
     }
 
-    interval_vector findContained(const Scalar& start, const Scalar& stop) const {
-        interval_vector result;
+    gtf_interval_vector findContained(const Scalar& start, const Scalar& stop) const {
+        gtf_interval_vector result;
         visit_contained(start, stop,
-                        [&](const interval& interval) { 
+                        [&](const gtf_interval& interval) { 
                           result.push_back(interval); 
                         });
         return result;
@@ -277,9 +277,9 @@ public:
                 x.second = std::max(x.second, iv.stop);
             }
                                                                 };
-                                            Extent extent;
-
-        visit_all([&](const interval & interval) { extent(interval); });
+	Extent extent;
+					    
+        visit_all([&](const gtf_interval & interval) { extent(interval); });
         return extent.x;
                                             }
 
@@ -288,7 +288,7 @@ public:
     std::pair<bool, std::pair<Scalar, Scalar>> is_valid() const {
         const auto minmaxStop = std::minmax_element(gtf_intervals.begin(), gtf_intervals.end(), 
                                                     gtfIntervalStopCmp());
-        const auto minmaxStart = std::minmax_element(intervals.begin(), gtf_intervals.end(), 
+        const auto minmaxStart = std::minmax_element(gtf_intervals.begin(), gtf_intervals.end(), 
                                                      gtfIntervalStartCmp());
         
         std::pair<bool, std::pair<Scalar, Scalar>> result = {true, { std::numeric_limits<Scalar>::max(),
@@ -353,8 +353,8 @@ public:
 
 private:
     gtf_interval_vector gtf_intervals;
-    std::unique_ptr<IntervalTree> left;
-    std::unique_ptr<IntervalTree> right;
+    std::unique_ptr<gtfIntervalTree> left;
+    std::unique_ptr<gtfIntervalTree> right;
     Scalar center;
 };
 

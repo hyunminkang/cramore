@@ -349,7 +349,7 @@ void JointGenotypeBlockReader::write_header(BCFOrderedWriter* odw, bool printTmp
   bcf_hdr_append(odw->hdr, "##INFO=<ID=ABZ,Number=1,Type=Float,Description=\"Average Z-scores of Allele Balance towards Reference Allele on Heterozygous Sites\">\n");	
   bcf_hdr_append(odw->hdr, "##INFO=<ID=NS_NREF,Number=1,Type=Integer,Description=\"Number of samples with non-reference reads\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=BQZ,Number=1,Type=Float,Description=\"Correlation between base quality and alleles\">\n");
-  //bcf_hdr_append(odw->hdr, "##INFO=<ID=MQZ,Number=1,Type=Float,Description=\"Correlation between mapping quality and alleles\">\n");
+  bcf_hdr_append(odw->hdr, "##INFO=<ID=MQZ,Number=1,Type=Float,Description=\"Correlation between mapping quality and alleles\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=CYZ,Number=1,Type=Float,Description=\"Correlation between cycle and alleles\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=STZ,Number=1,Type=Float,Description=\"Correlation between strand and alleles\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=NMZ,Number=1,Type=Float,Description=\"Correlation between mismatch counts per read and alleles\">\n");

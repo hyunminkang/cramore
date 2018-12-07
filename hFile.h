@@ -38,7 +38,7 @@ class hFile {
 
   std::vector<GenomeInterval> intervals;
   uint32_t interval_index;
-  std::map<std::string, IntervalTree*> interval_tree;
+  //std::map<std::string, IntervalTree*> interval_tree;
 
   hFile(const char* filename, std::vector<GenomeInterval>* pIntervals = NULL, bool printHeader = false);
 

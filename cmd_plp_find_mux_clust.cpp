@@ -8,7 +8,7 @@
 ///////////////////////////////////////////////////////////////////
 // Freemuxlet : Genotype-free deconvolution of scRNA-seq doublets
 //////////////////////////////////////////////////////////////////
-int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
+int32_t cmdPlpFindMuxClust(int32_t argc, char** argv) {
   //std::string gtfFile;
   std::string outPrefix;
   std::string plpPrefix;

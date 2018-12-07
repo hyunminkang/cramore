@@ -2,6 +2,11 @@
 #include "sc_drop_seq.h"
 #include "PhredHelper.h"
 
+double logAdd(double la, double lb) {
+  if ( la > lb ) { return la + log(1.0 + exp(lb-la)); }
+  else           { return lb + log(1.0 + exp(la-lb)); }  
+}
+
 int32_t sc_dropseq_lib_t::add_snp(int32_t _rid, int32_t _pos, char _ref, char _alt, double _af, double* _gps) {
   snps.resize(nsnps+1);
   snp_umis.resize(nsnps+1);
@@ -86,16 +91,17 @@ bool sc_dropseq_lib_t::add_read(int32_t snpid, int32_t cellid, const char* umi, 
 }
 
 
-int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr, const char* field, double genoError,bool loadUMI) {
+int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr, const char* field, double genoErrorOffset, double genoErrorCoeffR2, const char* r2info, bool loadUMI) {
   if ( loadUMI == true )
     error("[E:%s] loadUMI = true option is not implemented yet", __PRETTY_FUNCTION__);
 
   int32_t nv = 0;
   if ( pvr != NULL ) { // variant sites are provided..
-    if ( pvr->read() == NULL )
+    if ( pvr->read() == NULL )  // attempt to read a variant from VCF
       error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, pvr->bcf_file_name.c_str());
 
-    if ( ! pvr->parse_posteriors(pvr->cdr.hdr, pvr->cursor(), field, genoError) )
+    // attempt to parse genotype field to make sure the field exists
+    if ( ! pvr->parse_posteriors(pvr->cdr.hdr, pvr->cursor(), field, 0) )
       error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,pvr->cursor()->rid), pvr->cursor()->pos+1);
 
     nv = pvr->get_nsamples();    
@@ -110,17 +116,33 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
   tsv_reader tsv_bcdf(fname);
 
   std::vector<int32_t> tmp_cell_totl_reads;
+  std::vector<int32_t> tmp_cell_totl_umis;  
   std::vector<int32_t> tmp_cell_uniq_reads;
   std::vector<int32_t> tmp_cell_num_snps;    
-  
+
+  int32_t n_expected_toks = 6;
   if ( tsv_bcdf.read_line() > 0 ) {
-    if ( ( tsv_bcdf.nfields != 5 ) ||
-	 ( strcmp("#DROPLET_ID",tsv_bcdf.str_field_at(0)) != 0 ) ||
-	 ( strcmp("BARCODE",tsv_bcdf.str_field_at(1)) != 0 ) ||
-	 ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
-	 ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
-	 ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(4)) != 0 ) ) 
-      error("THe header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix);
+    if ( ( tsv_bcdf.nfields == 5 ) &&   // for backward compatibility
+	 ( ( strcmp("#DROPLET_ID",tsv_bcdf.str_field_at(0)) != 0 ) ||
+	   ( strcmp("BARCODE",tsv_bcdf.str_field_at(1)) != 0 ) ||
+	   ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
+	   ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
+	   ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(4)) != 0 ) ) ) {
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix);
+    }
+    else if ( ( tsv_bcdf.nfields == 6 ) &&
+	 ( ( strcmp("#DROPLET_ID",tsv_bcdf.str_field_at(0)) != 0 ) ||
+	   ( strcmp("BARCODE",tsv_bcdf.str_field_at(1)) != 0 ) ||
+	   ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
+	   ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
+	   ( strcmp("NUM.UMIwSNP",tsv_bcdf.str_field_at(4)) != 0 ) ||	   
+	   ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(5)) != 0 ) ) ) {
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.UMIwSNP NUM.SNP", plpPrefix);
+    }
+    else if ( ( tsv_bcdf.nfields < 5 ) || ( tsv_bcdf.nfields > 6 ) ) {
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI (NUM.UMIwSNP-optional) NUM.SNP", plpPrefix);  
+    }
+    n_expected_toks = tsv_bcdf.nfields;
   }
   else error("Cannot read the first line of %s.cel.gz", plpPrefix);
 
@@ -129,8 +151,15 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
     if ( new_id != tsv_bcdf.int_field_at(0) )
       error("[E:%s] Observed DROPLET_ID %d is different from expected DROPLET_ID. Did you modify the digital pileup files by yourself?", __PRETTY_FUNCTION__, tsv_bcdf.int_field_at(0), new_id);
     tmp_cell_totl_reads.push_back(tsv_bcdf.int_field_at(2));
-    tmp_cell_uniq_reads.push_back(tsv_bcdf.int_field_at(3));
-    tmp_cell_num_snps.push_back(tsv_bcdf.int_field_at(4));
+    if ( n_expected_toks == 5 ) {
+      tmp_cell_uniq_reads.push_back(tsv_bcdf.int_field_at(3));
+      tmp_cell_num_snps.push_back(tsv_bcdf.int_field_at(4));
+    }
+    else {
+      tmp_cell_totl_umis.push_back(tsv_bcdf.int_field_at(3));  // could be zero. no sanity check on this.      
+      tmp_cell_uniq_reads.push_back(tsv_bcdf.int_field_at(4));
+      tmp_cell_num_snps.push_back(tsv_bcdf.int_field_at(5));      
+    }
   }
   verbose(50, "Finished loading %d droplets..", nbcs);
 
@@ -150,7 +179,11 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
   }
   else error("Cannot read the first line of %s.var.gz", plpPrefix);
 
-  int nrd = 0;  
+  int nrd = 0;
+
+  float* r2flts = NULL; // for extracting R2 fields..
+  int32_t n_r2flts = 0;
+  
   while( tsv_varf.read_line() > 0 ) {
     const char* chr = tsv_varf.str_field_at(1);
     if ( chr2rid.find(chr) == chr2rid.end() ) {
@@ -203,18 +236,46 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
 	  }
 	}
 
-	if ( passed ) {
+	if ( passed ) { // add just empty SNPs without any GPs
 	  if ( add_snp(rid, pos, ref, alt, af, NULL) + 2 != tsv_varf.nlines )
 	    error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
 	  break;
 	}
 	else if ( found ) {
-	  if ( ! pvr->parse_posteriors(pvr->cdr.hdr, v, field, genoError) )
+	  // get GP, PL, or GT fields to convert into gps
+	  if ( ! pvr->parse_posteriors(pvr->cdr.hdr, v, field, 0) )
 	    error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(pvr->cdr.hdr,v->rid), v->pos+1);
 	  double* gps = new double[nv*3];
+	  double avgGPs[3] = {1e-10,1e-10,1e-10}; // represents empirical GP averages across sampleso
+	  // get genotype probabilities
 	  for(int32_t i=0; i < nv * 3; ++i) {
-	    gps[i] = pvr->get_posterior_at(i);
+	    avgGPs[i%3] += (gps[i] = pvr->get_posterior_at(i));
 	  }
+	  // get average GPs to account for genoErrors
+	  double sumGP = avgGPs[0] + avgGPs[1] + avgGPs[2];
+	  avgGPs[0] /= sumGP;
+	  avgGPs[1] /= sumGP;
+	  avgGPs[2] /= sumGP;
+
+	  // account for genotype errors as [Offset] + [1-Offset]*[1-R2]*[Coeff]
+	  double err = genoErrorOffset;
+	  if ( genoErrorCoeffR2 > 0 ) { // look for R2 INFO field
+	    if ( ( bcf_get_info_float(pvr->cdr.hdr, v, r2info, &r2flts, &n_r2flts) < 0 ) || ( n_r2flts != 1 ) ) {
+	      error("Cannot extract %s (1 float value) from INFO field at %s:%d. Cannot use --geno-error-coeff", r2info, chr, pos);
+	    }
+	    err += (1-genoErrorOffset) * (1-r2flts[0]) * genoErrorCoeffR2;
+	  }
+
+	  if ( err > 0.999 ) err = 0.999;
+	  if ( err < 0 ) err = 0;	  
+	  
+	  if ( err > 0 ) { // if error is greater than zero, adjust it
+	    for(int32_t i=0; i < nv * 3; ++i) {
+	      gps[i] = (1-err) * gps[i] + err * avgGPs[ i % 3 ];
+	    }	    
+	  }
+
+	  // Sanity check on the number of SNPs
 	  if ( add_snp(rid, pos, ref, alt, af, gps) + 2 != tsv_varf.nlines )
 	    error("Expected SNP nID = %d but observed %d", tsv_varf.nlines-1, nsnps-1);
 	  break;
@@ -225,7 +286,9 @@ int32_t sc_dropseq_lib_t::load_from_plp(const char* plpPrefix, BCFFilteredReader
       }
     }
   }
-  verbose(50, "Finished loading %d variants..", nsnps);  
+  verbose(50, "Finished loading %d variants..", nsnps);
+
+  free(r2flts);  
 
   // reading pileup information finally...
   verbose(50, "Reading pileup information from %s.plp.gz..", plpPrefix);  

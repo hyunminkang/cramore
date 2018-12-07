@@ -133,7 +133,7 @@ int32_t cmdVcfExtract(int32_t argc, char** argv) {
     
     notice("Finished reading rs-sorted dbSNP file %s and found %u of %u", siteVcf.c_str(), variantList.size(), rsIDs.size());
   }
-  else {
+  else if ( varList.empty() ) {
     std::vector<GenomeInterval> intervals;
     if ( !bfr.target_region.empty() ) {
       intervals.push_back( GenomeInterval(bfr.target_region) );

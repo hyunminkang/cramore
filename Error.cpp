@@ -48,10 +48,16 @@ void warning(const char * msg, ...)
 
   va_start(ap, msg);
 
-  fprintf(stderr,"\n\aWARNING - \n");
+  time_t current_time;
+  char buff[255];
+  current_time = time(NULL);
+
+  strftime(buff, 120, "%Y/%m/%d %H:%M:%S", localtime(&current_time));
+
+  fprintf(stderr,"\aWARNING [%s] - ", buff);
   vfprintf(stderr, msg, ap);
   fprintf(stderr,"\n");
-
+  
   va_end(ap);
 }
 

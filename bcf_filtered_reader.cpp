@@ -41,7 +41,7 @@ void BCFFilteredReader::init_params() {
   // read sex map
   if ( !sexMap.empty() ) {
     tsv_reader tsv_sex_map(sexMap.c_str());
-    int32_t ncols = 0, icol = -1, scol;
+    int32_t ncols = 0, icol = -1, scol = 0;
     for(int32_t i=0; ; ++i) {
       if ( ncols == 0 ) {
 	ncols = tsv_sex_map.read_line();
@@ -253,6 +253,7 @@ bool BCFFilteredReader::parse_likelihoods(bcf_hdr_t* hdr, bcf1_t* v, const char*
 
   bcf_unpack(v, BCF_UN_ALL);
 
+  // parse PL fields
   if ( bcf_get_format_int32(hdr, v, name, &pls, &n_pls) < 0 ) {
     return false;
   }

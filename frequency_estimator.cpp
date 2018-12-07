@@ -337,6 +337,48 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
   return true;
 }
 
+/*
+bool frequency_estimator::lr_test_hwe(bool use_isaf) {
+  estimate_isaf_em_hwd(); // estimate pooled allele frequency first
+
+  Vector v00(ndims+1); // null hypothesis   : pooled AF with HWE
+  Vector v01(ndims+2); // alt1 hypohthesis  : pooled AF with HWD (theta)
+  Vector v10(ndims+1); // alt2 hypothesis   : is     AF with HWE
+  Vector v11(ndims+2); // alt2 hypothesis   : is     AF with HWD (theta)
+
+  v00[0] = v01[0] = v10[0] = v11[0] = pooled_af * 2.0;
+
+  if ( theta < -1 ) { theta = -0.99999; }
+  else if ( theta > 1 ) { theta = 0.99999; }  
+
+  for(int32_t i=0; i < ndims; ++i) {
+    v00[i] = v01[i] = 0;
+    v10[i] = v11[i] = betas[i];
+  }
+
+  double llk00, llk01, llk10, llk11;
+  
+  assumeHWD = false;
+  llk00 = 0-Evaluate(v00);
+  llk10 = 0-Evaluate(v10);
+
+  v10[ndims+1] = v11[ndims+1] = 0.5 * (log(1.0+theta) - log(1.0-theta));
+  assumeHWD = true;
+  llk01 = 0-Evaluate(v01);
+  llk11 = 0-Evaluate(v11);  
+
+  ibc0 = theta; 
+  hwe0z = (llk01 < llk00) ? 0 : ( ( (ibc0 < 0) ? -1.0 : 1.0 ) * sqrt(2*(llk01 - llk00)) );  
+
+  ibc1 = theta;
+  hwe1z = (llk11 < llk10) ? 0 : ( ( (ibc1 < 0) ? -1.0 : 1.0 ) * sqrt(2*(llk11 - llk10)) );
+
+  isaf_computed = true;
+
+  return true;
+}
+*/
+
 
 double frequency_estimator::Evaluate(Vector& v) {
   double llk = 0;
@@ -386,8 +428,8 @@ double frequency_estimator::Evaluate(Vector& v) {
     ifs[i] = isaf;
     if ( ploidies[i] == 2 ) {
       llk += log(isafRR    * phredConv.toProb(pls[i*3]) +
-		 2 * isafRA * phredConv.toProb(pls[i*3+1]) +
-		 isafAA      * phredConv.toProb(pls[i*3+2]));
+		 isafRA    * phredConv.toProb(pls[i*3+1]) +
+		 isafAA    * phredConv.toProb(pls[i*3+2]));
     }
     else if ( ploidies[i] == 1 ) {
       llk += log(isafQ * phredConv.toProb(pls[i*3]) +
@@ -460,6 +502,210 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
     Eigen::VectorXd vBeta = VD * ( pSVD->matrixU().transpose() * y ) / 2.0;
     for(int32_t k=0; k < ndims; ++k)
       betas[k] = (float)vBeta[k];
+    
+    isaf_computed = true;
+  }
+  
+  //return 0;
+}
+
+void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
+  if ( !isaf_computed ) {
+    estimate_pooled_af_em();     
+    Eigen::VectorXd yE(nsamples);
+    Eigen::VectorXd yD(nsamples);    
+    Eigen::VectorXd isafE = Eigen::VectorXd::Constant(nsamples, pooled_af);
+    Eigen::VectorXd isafD = Eigen::VectorXd::Constant(nsamples, pooled_af);    
+
+    double maf = pooled_af > 0.5 ? 1-pooled_af : pooled_af;
+    double lambda = maxLambda * (1.-maf) / (maf * nsamples * 2.0);
+    double p0E, p1E, p2E; // frequencies under HWE - priors
+    double p0D, p1D, p2D; // frequencies under HWD - priors
+    double x0E, x1E, x2E; // frequencies under HWE - posteriors
+    double x0D, x1D, x2D; // frequencies under HWD - posteriors
+
+    double minAF = 0.5/(nsamples+nsamples+1.);
+    double minGF = minAF*minAF;
+
+    double thetaDouble = 0;
+
+    // U diag(d_i^2/(d_i^2+lambda)) U'y
+    Eigen::VectorXd d2 = pSVD->singularValues();
+    Eigen::MatrixXd UD2 = pSVD->matrixU(); //
+    for(int32_t j=0; j < nsamples; ++j) {
+      for(int32_t k=0; k < ndims; ++k) {
+	//UD2(j,k) *= ( d2[k] / ( d2[k] + lambda ) );
+	UD2(j,k) *= ( d2[k] * d2[k] / ( d2[k] + lambda ) / ( d2[k] + lambda) );
+      }
+    }
+
+    Eigen::MatrixXd VD = pSVD->matrixV();
+    for(int32_t j=0; j < ndims; ++j) {
+      for(int32_t k=0; k < ndims; ++k) {
+	VD(j,k) *= ( d2[k] / ( d2[k] + lambda ) / ( d2[k] + lambda) );	
+      }
+    }
+
+    double l0, l1, l2;    
+    for(int32_t i=0; i < maxiter; ++i) { // maxiter = 30
+      double thetaNum = 1e-100;
+      double thetaDen = 1e-100;	
+             
+      for(int32_t j=0; j < nsamples; ++j) {
+	if ( ploidies[j] == 2 ) {
+	  // calculate isaf under HWD
+	  p0E = ( 1.0 - isafD[j] ) * ( 1.0 - isafD[j] ); // * phredConv.toProb(pls[3*j]);
+	  p1E = 2.0 * isafD[j] * ( 1.0 - isafD[j] ); // * phredConv.toProb(pls[3*j+1]);
+	  p2E = isafD[j] * isafD[j]; // * phredConv.toProb(pls[3*j+2]);
+	  p0D = p0E + 0.5 * thetaDouble * p1E;
+	  p1D = p1E * (1.-thetaDouble);
+	  p2D = p2E + 0.5 * thetaDouble * p1E;
+	  if ( p0D < minGF ) { // boundary condition
+	    p0D = minGF;                  // K = -p0E + minGF
+	    p1D = p1E + 2.0*p0E - 2.0*minGF;  // p1D = p1E - 2K = p1E + 2p0E - 2minGF
+	    p2D = p2E - p0E + minGF;      // p2D = p2E + K = p2E - p0E + minGF
+	  }
+	  else if ( p2D < minGF) {
+	    p2D = minGF;                  // K = -p0E + minGF
+	    p1D = p1E + 2.0*p2E - 2.0*minGF;  // p1D = p1E - 2K = p1E + 2p0E - 2minGF
+	    p0D = p0E - p2E + minGF;      // p2D = p2E + K = p2E - p0E + minGF	    
+	  }
+	  // calculate isaf under HWE	  
+	  p0E = ( 1.0 - isafE[j] ) * ( 1.0 - isafE[j] ); // * phredConv.toProb(pls[3*j]);
+	  p1E = 2.0 * isafE[j] * ( 1.0 - isafE[j] ); // * phredConv.toProb(pls[3*j+1]);
+	  p2E = isafE[j] * isafE[j]; // * phredConv.toProb(pls[3*j+2]);	  
+
+	  l0 = phredConv.toProb(pls[3*j+0]);
+	  l1 = phredConv.toProb(pls[3*j+1]);
+	  l2 = phredConv.toProb(pls[3*j+2]);	  
+	  
+	  x0E = p0E * l0;
+	  x1E = p1E * l1; 
+	  x2E = p2E * l2; 
+
+	  x0D = p0D * l0; 
+	  x1D = p1D * l1; 
+	  x2D = p2D * l2;
+
+	  yE[j] = (x1E+x2E+x2E+1e-100)/(x0E+x1E+x2E+1e-100);
+	  yD[j] = (x1D+x2D+x2D+1e-100)/(x0D+x1D+x2D+1e-100);
+
+	  //double w = fabs(l0 + l2 - l1 - l1); // heuristic for now.
+	  
+	  thetaNum += (x1D / (x0D + x1D + x2D) );
+	  thetaDen += (p1E);
+	}
+	else if ( ploidies[j] == 1 ) {
+	  x0E = ( 1.0 - isafE[j] ) * phredConv.toProb(pls[3*j]);
+	  x2E = isafE[j] * phredConv.toProb(pls[3*j+2]);
+	  yE[j] = (x2E+x2E+1e-100)/(x0E+x2E+1e-100);
+	  
+	  x0D = ( 1.0 - isafD[j] ) * phredConv.toProb(pls[3*j]);
+	  x2D = isafD[j] * phredConv.toProb(pls[3*j+2]);
+	  yD[j] = (x2D+x2D+1e-100)/(x0D+x2D+1e-100);	  
+	}
+	else { // this might be buggy for multi-allelics
+	  yE[j] = isafE[j] * 2.0; // use expectation
+	  yD[j] = isafD[j] * 2.0; // use expectation	  
+	}
+      }
+      
+      // calculate isaf (which already reflects beta)
+      isafD = UD2 * ( pSVD->matrixU().transpose() * yD ) / 2.0;
+      isafE = UD2 * ( pSVD->matrixU().transpose() * yE ) / 2.0;      
+      for(int32_t j=0; j < nsamples; ++j) {
+	if ( isafD[j] < minAF ) isafD[j] = minAF;
+	else if ( 1.0-isafD[j] < minAF ) isafD[j] = 1.0-minAF;
+	if ( isafE[j] < minAF ) isafE[j] = minAF;
+	else if ( 1.0-isafE[j] < minAF ) isafE[j] = 1.0-minAF;	
+      }
+
+      thetaDouble = 1.0 - thetaNum/thetaDen;
+    }
+
+    for(int32_t j=0; j < nsamples; ++j) {
+      ifs[j] = (float)isafD[j];
+    }
+
+    Eigen::VectorXd vBetaD = VD * ( pSVD->matrixU().transpose() * yD ) / 2.0;
+    Eigen::VectorXd vBetaE = VD * ( pSVD->matrixU().transpose() * yE ) / 2.0;    
+    for(int32_t k=0; k < ndims; ++k) {
+      betas[k] = (float)vBetaD[k];
+      //betasE[k] = (float)vBetaE[k];      
+    }
+
+    theta = (float)thetaDouble;
+
+    // calculate likelihoods
+    double llk00 = 0, llk01 = 0, llk10 = 0, llk11 = 0;
+    double fE[3] = { (1.0-pooled_af)*(1.0-pooled_af),
+		      2*pooled_af*(1.0-pooled_af),
+		      pooled_af*pooled_af };
+    double fD[3] = { fE[0] + 0.5 * thetaDouble * fE[1],
+		     fE[1] * (1.0-thetaDouble),
+		     fE[2] + 0.5 * thetaDouble * fE[1] };
+    if ( fD[0] < minGF ) {
+      fD[0] = minGF;
+      fD[1] = fE[1] + 2*fE[0] - 2*minGF;
+      fD[2] = fE[2] - fE[0] + minGF;      
+    }
+    else if ( fD[2] < minGF ) {
+      fD[2] = minGF;
+      fD[1] = fE[1] + 2*fE[2] - 2*minGF;
+      fD[0] = fE[0] - fE[2] + minGF;            
+    }
+
+    for(int32_t j=0; j < nsamples; ++j) {
+      if ( ploidies[j] == 2 ) {
+	p0E = ( 1.0 - isafD[j] ) * ( 1.0 - isafD[j] ); // * phredConv.toProb(pls[3*j]);
+	p1E = 2.0 * isafD[j] * ( 1.0 - isafD[j] ); // * phredConv.toProb(pls[3*j+1]);
+	p2E = isafD[j] * isafD[j]; // * phredConv.toProb(pls[3*j+2]);
+	
+	p0D = p0E + 0.5 * thetaDouble * p1E;
+	p1D = p1E * (1.0 - thetaDouble);
+	p2D = p2E + 0.5 * thetaDouble * p1E;
+	if ( p0D < minGF ) { // boundary condition
+	  p0D = minGF;                  // K = -p0E + minGF
+	  p1D = p1E + 2*p0E - 2*minGF;  // p1D = p1E - 2K = p1E + 2p0E - 2minGF
+	  p2D = p2E - p0E + minGF;      // p2D = p2E + K = p2E - p0E + minGF
+	}
+	else if ( p2D < minGF ) {
+	  p2D = minGF;                  // K = -p0E + minGF
+	  p1D = p1E + 2*p2E - 2*minGF;  // p1D = p1E - 2K = p1E + 2p0E - 2minGF
+	  p0D = p0E - p2E + minGF;      // p2D = p2E + K = p2E - p0E + minGF	    
+	}
+
+	p0E = ( 1.0 - isafE[j] ) * ( 1.0 - isafE[j] ); // * phredConv.toProb(pls[3*j]);
+	p1E = 2 * isafE[j] * ( 1.0 - isafE[j] ); // * phredConv.toProb(pls[3*j+1]);
+	p2E = isafE[j] * isafE[j]; // * phredConv.toProb(pls[3*j+2]);	
+
+	l0 = phredConv.toProb(pls[3*j+0]);
+	l1 = phredConv.toProb(pls[3*j+1]);
+	l2 = phredConv.toProb(pls[3*j+2]);
+
+	llk00 += log(fE[0] * l0 + fE[1] * l1 + fE[2] * l2);
+	llk01 += log(fD[0] * l0 + fD[1] * l1 + fD[2] * l2);
+	llk10 += log(p0E   * l0 + p1E   * l1 + p2E   * l2);
+	llk11 += log(p0D   * l0 + p1D   * l1 + p2D   * l2);		
+      }
+      else if ( ploidies[j] == 1 ) {
+	p0E = ( 1.0 - isafE[j] );
+	p2E = isafE[j];
+	p0D = ( 1.0 - isafD[j] );
+	p2D = isafD[j];	
+	l0 = phredConv.toProb(pls[3*j+0]);
+	l2 = phredConv.toProb(pls[3*j+2]);
+
+	llk00 += log( (1.0-pooled_af) * l0 + pooled_af * l2);
+	llk01 += log( (1.0-pooled_af) * l0 + pooled_af * l2);
+	llk10 += log( p0E * l0 + p2E * l2);
+	llk11 += log( p0D * l0 + p2D * l2);
+      }
+    }
+
+    ibc0 = ibc1 = theta;
+    hwe0z = (llk01 < llk00) ? 0 : ( ( (ibc0 < 0) ? -1.0 : 1.0 ) * sqrt(2*(llk01 - llk00)) );
+    hwe1z = (llk11 < llk10) ? 0 : ( ( (ibc1 < 0) ? -1.0 : 1.0 ) * sqrt(2*(llk11 - llk10)) );    
     
     isaf_computed = true;
   }
