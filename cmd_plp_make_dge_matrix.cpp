@@ -73,7 +73,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
 	   ( strcmp("NUM.READ",tsv_bcdf.str_field_at(2)) != 0 ) ||
 	   ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
 	   ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(4)) != 0 ) ) ) {
-      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix);
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.SNP", plpPrefix.c_str());
     }
     else if ( ( tsv_bcdf.nfields == 6 ) &&
 	 ( ( strcmp("#DROPLET_ID",tsv_bcdf.str_field_at(0)) != 0 ) ||
@@ -82,14 +82,14 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
 	   ( strcmp("NUM.UMI",tsv_bcdf.str_field_at(3)) != 0 ) ||
 	   ( strcmp("NUM.UMIwSNP",tsv_bcdf.str_field_at(4)) != 0 ) ||	   
 	   ( strcmp("NUM.SNP",tsv_bcdf.str_field_at(5)) != 0 ) ) ) {
-      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.UMIwSNP NUM.SNP", plpPrefix);
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI NUM.UMIwSNP NUM.SNP", plpPrefix.c_str());
     }
     else if ( ( tsv_bcdf.nfields < 5 ) || ( tsv_bcdf.nfields > 6 ) ) {
-      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI (NUM.UMIwSNP-optional) NUM.SNP", plpPrefix);  
+      error("The header line of %s.cel.gz is malformed or outdated. Expecting #DROPLET_ID BARCODE NUM.READ NUM.UMI (NUM.UMIwSNP-optional) NUM.SNP", plpPrefix.c_str());  
     }
     n_expected_toks = tsv_bcdf.nfields;
   }
-  else error("Cannot read the first line of %s.cel.gz", plpPrefix);
+  else error("Cannot read the first line of %s.cel.gz", plpPrefix.c_str());
 
   // read the barcode information
   std::map<int32_t,int32_t> id_cel2dge;
