@@ -188,8 +188,10 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
     int32_t endpos = bam_endpos(b);
     const char* chrom = bam_get_chrom(sr.hdr, b);
     int32_t tid2rid = bcf_hdr_name2id(vr.cdr.hdr, chrom);
+    bool noBCF = false;
     if ( tid2rid < 0 ) { // no matching BCF entry in the chromosome, skip;
-      continue;
+      noBCF = true;
+      //continue;
     }
 
     int32_t n_cleared = vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );
@@ -197,19 +199,21 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
     //  v_umis.clear();
     //}
     ibeg += n_cleared;
-
+      
     // add new snps
-    while( ( !vr.eof ) && ( ( vr.cursor()->rid < tid2rid ) || ( ( vr.cursor()->rid == tid2rid ) && ( vr.cursor()->pos < endpos ) ) ) ) {
-      if ( vr.read() ) {
-	double af = vr.calculate_af(true);
-	snpid = scl.add_snp( vr.cursor()->rid, vr.cursor()->pos+1, vr.cursor()->d.allele[0][0], vr.cursor()->d.allele[1][0], af, NULL);
-	snpids.push_back(snpid);
-      }
-      else {
-	//error("Cannot read new SNP");
+    if ( !noBCF ) {
+      while( ( !vr.eof ) && ( ( vr.cursor()->rid < tid2rid ) || ( ( vr.cursor()->rid == tid2rid ) && ( vr.cursor()->pos < endpos ) ) ) ) {
+	if ( vr.read() ) {
+	  double af = vr.calculate_af(true);
+	  snpid = scl.add_snp( vr.cursor()->rid, vr.cursor()->pos+1, vr.cursor()->d.allele[0][0], vr.cursor()->d.allele[1][0], af, NULL);
+	  snpids.push_back(snpid);
+	}
+	else {
+	  //error("Cannot read new SNP");
+	}
       }
     }
-
+    
     // get barcode
     int32_t ibcd = 0;
     if ( tagGroup.empty() ) {
@@ -239,7 +243,7 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
 	continue;
       }
     }
-
+    
     ++nReadsTMP;
 
     // get UMI
@@ -264,9 +268,11 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
 	//error("[E:%s] Cannot find UMI tag %d %d %x %s %s %x", __PRETTY_FUNCTION__, sr.nbuf, sr.ridx, sr.cursor(), bcd, utag, umi);
       }
     }
+
+    
     ++scl.cell_totl_reads[ibcd];
 
-    if ( !skipUmiFlag ) {
+    if ( !skipUmiFlag ) {  // count UMI
       if ( ibcd >= (int32_t)umiLoci.size() )
 	umiLoci.resize((ibcd + 1) * 2);
       
@@ -306,6 +312,8 @@ int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
       }
       //umiLoci[ibcd][sumi].add( chrom, b->core.pos+1, endpos );
     }
+
+    if ( noBCF ) continue;  // skip the part that reads variants overlaps info
     
     // genotype all reads together
     int32_t nv_pass = 0;

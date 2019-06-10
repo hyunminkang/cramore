@@ -345,7 +345,7 @@ int32_t cmdVcfSampleSummary(int32_t argc, char** argv) {
   hprintf(wf,"\n");
   
   for(int32_t i=0; i < nsamples; ++i) {
-    hprintf(wf, "%s", odr.hdr->id[BCF_DT_SAMPLE][i]);
+    hprintf(wf, "%s", odr.hdr->id[BCF_DT_SAMPLE][i].key);
     hprintf(wf, "\t%d", nVariant);
     for(int32_t j=0; j < (int32_t)varFields.size(); ++j) {
       hprintf(wf, "\t%lld", mapFieldVars[varFields[j]][i]);

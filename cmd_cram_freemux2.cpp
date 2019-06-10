@@ -8,7 +8,7 @@
 ///////////////////////////////////////////////////////////////////
 // Freemuxlet : Genotype-free deconvolution of scRNA-seq doublets
 //////////////////////////////////////////////////////////////////
-int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
+int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   //std::string gtfFile;
   std::string outPrefix;
   std::string plpPrefix;
@@ -38,7 +38,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
-//    LONG_MULTI_DOUBLE_PARAM("alpha",&gridAlpha, "Grid of alpha to search for (default is 0, 0.5)")
+//  LONG_MULTI_DOUBLE_PARAM("alpha",&gridAlpha, "Grid of alpha to search for (default is 0, 0.5)")
     LONG_INT_PARAM("nsample",&nSamples,"Number of samples multiplexed together")
     LONG_PARAM("aux-files", &auxFiles, "Turn on writing auxilary output files")
     LONG_INT_PARAM("verbose", &globalVerbosityThreshold, "Turn on verbose mode with specific verbosity threshold. 0: fully verbose, 100 : no verbose messages")
@@ -69,21 +69,14 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   if ( plpPrefix.empty() || outPrefix.empty() || ( nSamples == 0 ) )
     error("Missing required option(s) : --plp, --out, --nsample");
 
-  /*
-  if ( gridAlpha.empty() ) {
-    gridAlpha.push_back(0);    
-    gridAlpha.push_back(0.5);    
-  }
-  */
-
   std::set<std::string> bcdSet;
   sc_dropseq_lib_t scl;
-  //int32_t nAlpha = (int32_t)gridAlpha.size();
 
   scl.load_from_plp(plpPrefix.c_str());
 
   std::map<std::string, int32_t> initCluster;
 
+  // if initial clusters are provided, use them here
   if ( !initClusterFile.empty() ) {
     tsv_reader tsv_clustf(initClusterFile.c_str());
     while ( tsv_clustf.read_line() > 0 ) {
@@ -98,11 +91,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     }
   }
 
-  // sort cells based on the number of SNP-overlapping unique reads.
-
-  // First, calculate the heterozygosity of each droplet to determine which droplet is
-  // likely potentially doublets
-
+  // sort cells based on the number of SNP-overlapping unique reads using singlet scores
   htsFile* wmix = NULL;
   std::vector<int32_t> nSNPs(scl.nbcs,0);
   std::vector<int32_t> nReads(scl.nbcs,0);  
@@ -116,11 +105,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   for(int32_t i=0; i < scl.nbcs; ++i) {
     int32_t si = i; // drops_srted[i];
     if (i % 1000 == 0 )
-      notice("Processing doublet likelihoods for %d droplets..", i+1);
+      notice("Processing singlet scores for %d droplets..", i+1);
 
-    //int32_t nSNPs = 0;
-    //int32_t nReads = 0;
-    
     // likelihood calculation across the overlapping SNPs
     std::map<int32_t,sc_snp_droplet_t* >::iterator it = scl.cell_umis[si].begin();
 
@@ -131,7 +117,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       double af = scl.snps[it->first].af;
 
       // calculate genotype likelihoods
-      //calculate_snp_droplet_doublet_GL(it->second, gls, 0.5);
+      // calculate_snp_droplet_doublet_GL(it->second, gls, 0.5);
       if ( cell_snp_plps[i][it->first] == NULL ) 
 	cell_snp_plps[i][it->first] = snp_cell_plps[it->first][i] = new snp_droplet_pileup;
       calculate_snp_droplet_pileup(it->second, cell_snp_plps[i][it->first], 0.5);
@@ -170,60 +156,14 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     drops_srted[i] = i;
   }  
   sc_drop_comp_t sdc(&scl);
-  std::sort( drops_srted.begin(), drops_srted.end(), sdc );  
+  std::sort( drops_srted.begin(), drops_srted.end(), sdc );
 
-  // store pairwise distances
-  std::vector< std::vector<dropD> > dropDs(scl.nbcs);
 
-  htsFile* wdist = NULL;
-  if ( auxFiles ) {
-    wdist = hts_open((outPrefix+".ldist.gz").c_str(),"wz");
-    hprintf(wdist, "ID1\tID2\tNSNP\tREAD1\tREAD2\tREADMIN\tLLK0\tLLK2\tLDIFF\tDIFF.SNP\n");
-  }
-
-  // calculate pairwise distance matrix
-  notice("Calculate pairwise genetic distance matrix..");
-  for(int32_t i=0; i < scl.nbcs; ++i) {
-    dropDs[i].resize(i);
-  }
-  for(int32_t v=0; v < scl.nsnps; ++v) {
-    if ( !snp_cell_plps[v].empty() ) {
-      if ( v % 10000 == 0 )
-	notice("Processing %d variants at %s:%d..", v, scl.rid2chr[scl.snps[v].rid].c_str(), scl.snps[v].pos);
-      std::map<int32_t,snp_droplet_pileup*>::iterator it, jt;
-      for(it = snp_cell_plps[v].begin(); it != snp_cell_plps[v].end(); ++it) {
-	double* glis = it->second->gls;
-	for(jt = snp_cell_plps[v].begin(); jt != it; ++jt) {
-	  double* gljs = jt->second->gls;	  	
-	  double af = scl.snps[v].af;
-	  double lk0 = 0, lk2 = 0;
-	  double gps[3];
-	  gps[0] = (1.0-af) * (1.0-af);
-	  gps[1] = 2.0 * af * (1.0-af);
-	  gps[2] = af * af;
-
-	  for(int32_t gi=0; gi < 3; ++gi) {
-	    lk2 += ( glis[gi*3+gi] * gljs[gi*3+gi] * gps[gi] );
-	    for(int32_t gj=0; gj < 3; ++gj) {
-	      lk0 += ( glis[gi*3+gi] * gljs[gj*3+gj] * gps[gi] * gps[gj] );
-	    }
-	  }
-	
-	  dropD& dd = dropDs[it->first][jt->first];
-	  ++dd.nsnps;
-	  dd.nread1 += it->second->nreads;
-	  dd.nread2 += jt->second->nreads;
-	  dd.llk2 += log(lk2);
-	  dd.llk0 += log(lk0);
-	}
-      }
-    }
-  }
-  
-  std::vector<double> votes(nSamples);
   std::vector<int32_t> clusts(scl.nbcs,-1);
-  std::vector<int32_t> ccounts(nSamples,0);
-
+  std::vector<int32_t> ccounts(nSamples,0);  
+  // initial clustering
+  // calculate pairwise genetic distances on demand while clustering
+  // use the assigned clusters if already provided
   if ( !initClusterFile.empty() ) {
     int32_t nmiss = 0;
     for(int32_t i=0; i < scl.nbcs; ++i) {
@@ -240,110 +180,53 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
     }
     if ( nmiss > 0 ) {
       warning("WARNING: %d of %d droplets do not have initial cluster assignment", nmiss, scl.nbcs);
-    }
+    }    
   }
-  else {
-    for(int32_t i=0; i < scl.nbcs; ++i) { // visit in the order of single score
+  else { // greedy clustering
+    // maintains GLs for each cluster, initially, everything is set up to be empty for each variant.
+    std::vector< std::map<int32_t,snp_droplet_pileup> > clustPileup(nSamples);
+
+    // greedy initial clustering
+    double sumMaxScore = 0;
+    for(int32_t i=0; i < scl.nbcs; ++i) {
       int32_t si = drops_srted[i];
+      if ( i > scl.nbcs * fracInitClust ) continue; // skip the droplet if exceed initial fraction of cells to be clustered.
 
-      if ( i > scl.nbcs * fracInitClust ) continue;
-      
-      if (i % 500 == 0 ) {
-	std::string buf;
-	for(int32_t j=0; j < nSamples; ++j) 
-	  catprintf(buf, " %d",ccounts[j]);
-	notice("Performing initial clustering of %d droplets.. cluster counts:%s", i+1, buf.c_str());
-      }
-      
+      // compute the distance with each clusters
+      std::vector<dropD> dropDs;
       for(int32_t j=0; j < nSamples; ++j) {
-	votes[j] = rand()/(RAND_MAX+1.)/1000.;
+	// compute genetic distance with each droplet
+	dropDs.push_back(scl.calculate_droplet_clust_distance(cell_snp_plps[si], clustPileup[j]));
       }
-    
-      for(int32_t j=0; j < i; ++j) {
-	int32_t sj = drops_srted[j];
-      
-	const dropD& dd = ( si > sj ) ? dropDs[si][sj] : dropDs[sj][si];
-      
-	if ( auxFiles ) {
-	  hprintf(wdist, "%d\t%d\t%d\t%d\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, sj, dd.nsnps, dd.nread1, dd.nread2, dd.nread1 > dd.nread2 ? dd.nread2 : dd.nread1, dd.llk0, dd.llk2, dd.llk2-dd.llk0, (dd.llk2-dd.llk0)/(dd.nsnps+1e-6));
-	}
-      
-	if ( clusts[sj] < 0 )
-	  error("i = %d, si = %d, j = %d, sj = %d, clust[%d] = %d", i, si, j, sj, sj, clusts[sj]);
-      
-	if ( dd.llk0- dd.llk2 > bfThres ) {
-	  votes[clusts[sj]] -= 1.0;
-	}
-	else if ( dd.llk2 - dd.llk0 > bfThres ) {
-	  votes[clusts[sj]] += 1.0;	
-	}
-      }
-      int32_t elected = 0;
-      double maxvote = votes[0];
+
+      int32_t maxClust = 0;
+      double maxScore = dropDs[0].llk2 - dropDs[0].llk0;
       for(int32_t j=1; j < nSamples; ++j) {
-	if ( maxvote < votes[j] ) {
-	  elected = j;
-	  maxvote = votes[j];
+	if ( dropDs[j].llk2 - dropDs[j].llk0 > maxScore ) {
+	  maxClust = j;
+	  maxScore = dropDs[j].llk2 - dropDs[j].llk0;
 	}
       }
-      clusts[si] = elected;
-      ++ccounts[elected];
+      clusts[si] = maxClust;
+      ++ccounts[maxClust];
+      sumMaxScore += maxScore;
+
+      for(std::map<int32_t,snp_droplet_pileup*>::const_iterator it = cell_snp_plps[si].begin();
+	  it != cell_snp_plps[si].end(); ++it) {
+	clustPileup[clusts[si]][it->first].merge(*it->second);
+      }
+
+      if ( i % 100 == 0 ) {
+	std::string s;
+	catprintf(s, "Processing %d droplets. Avg maxScore = %.5lg. Cluster counts:", i+1, sumMaxScore/(i+1));
+	for(int32_t j=0; j < nSamples; ++j) 
+	  catprintf(s, " %d",ccounts[j]);
+	notice(s.c_str());
+      }
     }
   }
 
-  if ( auxFiles ) hts_close(wdist);
-
-  notice("Finished calculating pairwise distance between the droplets..");
-
-  if ( initIteration > 0 ) {
-    for(int32_t iter=0; iter < 10; ++iter) {
-      int32_t changed = 0;
-      
-      std::vector<int32_t> orand(scl.nbcs);
-      for(int32_t i=0; i < scl.nbcs; ++i) orand[i] = i;
-      std::random_shuffle(orand.begin(), orand.end());
-      
-      std::fill(ccounts.begin(), ccounts.end(), 0);
-      
-      for(int32_t i=0; i < scl.nbcs; ++i) {
-	int32_t si = orand[i]; // drops_srted[i];
-	
-	for(int32_t j=0; j < nSamples; ++j) {
-	  votes[j] = rand()/(RAND_MAX+1.)/1000.;
-	}
-	
-	for(int32_t j=0; j < scl.nbcs; ++j) {
-	  if ( si != j ) {
-	    double bf = ( j < si ) ? ( dropDs[si][j].llk2 - dropDs[si][j].llk0 ) : ( dropDs[j][si].llk2 - dropDs[j][si].llk0 );
-	    if ( clusts[j] >= 0 ) {
-	      if ( bf > bfThres ) { ++votes[clusts[j]]; }
-	      else if ( bf < 0-bfThres ) { --votes[clusts[j]]; }
-	    }
-	  }
-	}
-	
-	int32_t elected = 0;
-	double maxvote = votes[0];
-	for(int32_t j=1; j < nSamples; ++j) {
-	  if ( maxvote < votes[j] ) {
-	    elected = j;
-	    maxvote = votes[j];
-	  }
-	}
-
-	if ( ( clusts[si] >= 0 ) || ( keepInitMissing == false ) ) {
-	  if ( clusts[si] != elected ) ++changed;
-	  clusts[si] = elected;
-	  ++ccounts[elected];
-	}
-      }
-      
-      std::string buf;
-      for(int32_t j=0; j < nSamples; ++j) 
-	catprintf(buf, " %d",ccounts[j]);
-      notice("Iteration %d, # changed = %d, cluster counts:%s",iter, changed, buf.c_str());
-    }
-  }
+  notice("Finished assigning initial identity of the cluster..");
 
   if ( auxFiles ) {
     htsFile* wc0 = hts_open((outPrefix+".clust0.samples.gz").c_str(),"wz");
@@ -368,10 +251,10 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       ++it;
     }
   }
-
+  
   time_t now = std::time(NULL);
   tm *ltm = localtime(&now);
-
+  
   // write initial clusters
   if ( auxFiles ) {
     htsFile* vc0 = hts_open((outPrefix+".clust0.vcf.gz").c_str(),"wz");
@@ -453,7 +336,7 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
   std::vector<int32_t> types(scl.nbcs,-1);
       
   // calculate probabilities of singlets/doublets
-  int32_t max_iter = 10;
+  int32_t max_iter = 10;  
   for(int32_t iter=0; iter < max_iter; ++iter) {
     notice("Inferring doublets and refining clusters.., iter = %d", iter+1);
     
@@ -482,7 +365,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	  gp1s[0] /= sum1;
 	  gp1s[1] /= sum1;
 	  gp1s[2] /= sum1;
-	  if ( ( geno_error > 0 ) && ( iter + 1 == max_iter ) ) {
+	  if ( geno_error > 0 ) {
+	  //if ( ( geno_error > 0 ) && ( iter + 1 == max_iter ) ) {	    
 	    gp1s[0] = (1-geno_error)*gp1s[0] + geno_error*gp0s[0];
 	    gp1s[1] = (1-geno_error)*gp1s[1] + geno_error*gp0s[1];
 	    gp1s[2] = (1-geno_error)*gp1s[2] + geno_error*gp0s[2];	    
@@ -497,7 +381,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	    gp2s[0] /= sum2;
 	    gp2s[1] /= sum2;
 	    gp2s[2] /= sum2;
-	    if ( ( geno_error > 0 ) && ( iter + 1 == max_iter ) ) {	      
+	    if ( geno_error > 0 ) {
+	    //if ( ( geno_error > 0 ) && ( iter + 1 == max_iter ) ) {	      
 	      gp2s[0] = (1-geno_error)*gp2s[0] + geno_error*gp0s[0];
 	      gp2s[1] = (1-geno_error)*gp2s[1] + geno_error*gp0s[1];
 	      gp2s[2] = (1-geno_error)*gp2s[2] + geno_error*gp0s[2];	    
@@ -578,13 +463,18 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       sumLLKs[i] = sumLLK;
     }
 
+    // re-assign sample identities
     clustPileup.clear();
     clustPileup.resize(nSamples);
-    int32_t nsingle = 0, namb = 0;
+    int32_t nsingle = 0, namb = 0, nchanged = 0;
     for(int32_t i=0; i < scl.nbcs; ++i) {
       if ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) { // best call is doublet
+	// consider as changed only when the assignment category was changed.
+	if ( types[i] != 1 ) ++nchanged;
+	
 	types[i] = 1; // doublet
 	bestPPs[i] = ( dblBestLLKs[i] + log_double_prior - sumLLKs[i] );
+
 	jBests[i] = dBest1s[i];
 	kBests[i] = dBest2s[i];
 	bestLLKs[i] = dblBestLLKs[i];
@@ -600,6 +490,9 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	}
       }
       else if ( sngBestLLKs[i] > sngNextLLKs[i] + 2 ) { // double call is singlet
+	if ( ( types[i] != 0 ) || ( jBests[i] != sBests[i] ) || ( kBests[i] != sBests[i] ) )
+	  ++nchanged;
+	
 	types[i] = 0; // singlet
 	++nsingle;
 
@@ -618,6 +511,8 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
 	}
       }
       else {  // ambiguous calls, use singlet as the best call
+	if ( types[i] != 2 ) ++nchanged;
+	
 	types[i] = 2; // ambiguous
 	++namb;
 
@@ -649,7 +544,12 @@ int32_t cmdCramFreemuxlet(int32_t argc, char** argv) {
       }      
     }
 
-    notice("Refining per-cluster genotype likelihoods.... %d singlets, %d doublets, and %d ambiguous", nsingle, scl.nbcs-nsingle-namb, namb);    
+    notice("Refining per-cluster genotype likelihoods.... %d singlets, %d doublets, %d ambiguous, and %d changed", nsingle, scl.nbcs-nsingle-namb, namb, nchanged);
+
+    if ( nchanged == 0 ) {
+      notice("No more changes in cluster assginment and singlet identities. Finishing iterations early");
+      break;
+    }
   }
 
 

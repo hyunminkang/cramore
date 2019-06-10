@@ -72,7 +72,7 @@ bool frequency_estimator::set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr ) {
     char buffer[65535];
     if ( !skipInfo ) {
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "HWE_SLP_P" ) < 0 ) {
-	sprintf(buffer,"##INFO=<ID=HWE_SLP_P,Number=1,Type=Float,Description=\"Z-score of HWE test with pooled allele frequencyes\">\n");
+	sprintf(buffer,"##INFO=<ID=HWE_SLP_P,Number=1,Type=Float,Description=\"Signed log p-value of HWE test with pooled allele frequencies\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "FIBC_P" ) < 0 ) {      
@@ -80,7 +80,7 @@ bool frequency_estimator::set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr ) {
 	bcf_hdr_append(wdr, buffer);
       }
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "HWE_SLP_I" ) < 0 ) {      
-	sprintf(buffer,"##INFO=<ID=HWE_SLP_I,Number=1,Type=Float,Description=\"Z-score of HWE test with individual-sepcific allele frequencyes\">\n");
+	sprintf(buffer,"##INFO=<ID=HWE_SLP_I,Number=1,Type=Float,Description=\"Signed log p-value of HWE test with individual-sepcific allele frequencies\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "FIBC_I" ) < 0 ) {
@@ -189,9 +189,9 @@ bool frequency_estimator::set_variant(bcf1_t* _iv, int8_t* _ploidies, int32_t* _
 	      pls[3*i] = pls[3*i+1] = pls[3*i+2] = 0;
 	      continue;
 	    }
-	  else { // pretend to be homozygous for haploid
-	    geno = bcf_gt_allele(gts[2*i]) + bcf_gt_allele(gts[2*i]);
-	  }
+	    else { // pretend to be homozygous for haploid
+	      geno = bcf_gt_allele(gts[2*i]) + bcf_gt_allele(gts[2*i]);
+	    }
 	  }
 	  pls[3*i] = errM[geno*3];
 	  pls[3*i+1] = errM[geno*3+1];
@@ -450,15 +450,16 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
     Eigen::VectorXd isaf = Eigen::VectorXd::Constant(nsamples, pooled_af);
 
     double maf = pooled_af > 0.5 ? 1-pooled_af : pooled_af;
+
     //Eigen::VectorXd lambda = Eigen::VectorXd::Constant(ndims, maxLambda * (1.-maf) / (maf * nsamples * 2));
-    double lambda = maxLambda * (1.-maf) / (maf * nsamples * 2);
+    double lambda = maxLambda * (1.-maf) / (maf * nsamples * 2.0);
     double p0, p1, p2;
 
     for(int32_t i=0; i < maxiter; ++i) { // maxiter = 30
       for(int32_t j=0; j < nsamples; ++j) {
 	if ( ploidies[j] == 2 ) {
 	  p0 = ( 1.0 - isaf[j] ) * ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j]);
-	  p1 = 2 * isaf[j] * ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j+1]);
+	  p1 = 2.0 * isaf[j] * ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j+1]);
 	  p2 = isaf[j] * isaf[j] * phredConv.toProb(pls[3*j+2]);
 	  y[j] = (p1+p2+p2+1e-100)/(p0+p1+p2+1e-100);
 	}
@@ -483,8 +484,8 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
       
       isaf = UD2 * ( pSVD->matrixU().transpose() * y ) / 2.0;
       for(int32_t j=0; j < nsamples; ++j) {
-	if ( isaf[j]*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 0.5/(nsamples+nsamples+1);
-	else if ( (1.0-isaf[j])*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 1.0-0.5/(nsamples+nsamples+1);
+	if ( isaf[j]*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 0.5/(nsamples+nsamples+1.0);
+	else if ( (1.0-isaf[j])*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 1.0-0.5/(nsamples+nsamples+1.0);
       }
     }
 
@@ -523,6 +524,8 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
     double p0D, p1D, p2D; // frequencies under HWD - priors
     double x0E, x1E, x2E; // frequencies under HWE - posteriors
     double x0D, x1D, x2D; // frequencies under HWD - posteriors
+
+    //notice("pooled_af = %lf, maf = %lf", pooled_af, maf);    
 
     double minAF = 0.5/(nsamples+nsamples+1.);
     double minGF = minAF*minAF;
@@ -612,7 +615,10 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
       
       // calculate isaf (which already reflects beta)
       isafD = UD2 * ( pSVD->matrixU().transpose() * yD ) / 2.0;
-      isafE = UD2 * ( pSVD->matrixU().transpose() * yE ) / 2.0;      
+      isafE = UD2 * ( pSVD->matrixU().transpose() * yE ) / 2.0;
+
+      //notice("pooled_af = %lf, maf = %lf, minMAF = %lf", pooled_af, maf, minAF);
+         
       for(int32_t j=0; j < nsamples; ++j) {
 	if ( isafD[j] < minAF ) isafD[j] = minAF;
 	else if ( 1.0-isafD[j] < minAF ) isafD[j] = 1.0-minAF;

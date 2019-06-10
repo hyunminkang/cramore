@@ -490,3 +490,39 @@ double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls) {
   return logdenom;
   //return 0;
 }
+
+dropD sc_dropseq_lib_t::calculate_droplet_clust_distance(std::map<int32_t,snp_droplet_pileup*> dropletPileup,
+							 std::map<int32_t,snp_droplet_pileup>& clustPileup) {
+  std::map<int32_t,snp_droplet_pileup*>::const_iterator it;
+  std::map<int32_t,snp_droplet_pileup>::const_iterator jt;
+  dropD dd;
+  
+  for(it = dropletPileup.begin(); it != dropletPileup.end(); ++it) {
+    jt = clustPileup.find(it->first);
+    if ( jt != clustPileup.end() ) {
+      double af = snps[it->first].af;
+      double lk0 = 0, lk2 = 0;
+      double gps[3];
+      gps[0] = (1.0-af) * (1.0-af);
+      gps[1] = 2.0 * af * (1.0-af);
+      gps[2] = af * af;
+
+      const double* glis = it->second->gls;
+      const double* gljs = jt->second.gls;
+
+      for(int32_t gi=0; gi < 3; ++gi) {
+	lk2 += ( glis[gi*3+gi] * gljs[gi*3+gi] * gps[gi] );
+	for(int32_t gj=0; gj < 3; ++gj) {
+	  lk0 += ( glis[gi*3+gi] * gljs[gj*3+gj] * gps[gi] * gps[gj] );
+	}
+      }
+      ++dd.nsnps;
+      dd.nread1 += it->second->nreads;
+      dd.nread2 += jt->second.nreads;
+      dd.llk2 += log(lk2);
+      dd.llk0 += log(lk0);
+    }
+  }
+
+  return dd;
+}

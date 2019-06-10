@@ -83,7 +83,10 @@ cramore_SOURCES = cramore.cpp \
 	cmd_cram_update_rg.cpp cmd_cram_gtf_util.cpp gtf.cpp \
 	cmd_cram_digital_pileup.cpp \
 	cmd_cram_freemuxlet.cpp \
+	cmd_cram_freemux2.cpp \
 	cmd_plp_make_dge_matrix.cpp \
-	cmd_plp_find_mux_clust.cpp
+	cmd_plp_find_mux_clust.cpp \
+	cmd_vcf_ibs0_summary.cpp compact_matrix.cpp \
+	cmd_vcf_update_info.cpp
 
 cramore_LDADD = $(ALL_LDFLAGS) $(HTSLIB_LIB) $(ALL_LIBS)

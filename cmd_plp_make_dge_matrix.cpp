@@ -19,7 +19,8 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   int32_t minCoveredSNPs = 0;
   bool removeChrPrefix = false;
   bool addChrPrefix = false;
-  bool proteinCodingOnly = false;
+  std::vector<std::string> genetypes;
+  bool commonGenetypes = false;
 
   paramList pl;
 
@@ -29,7 +30,8 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     LONG_STRING_PARAM("gtf",&gtfFile, "GTF-formatted file for gene/transcript annotation")
     LONG_PARAM("gtf-remove-chr",&removeChrPrefix, "Remove 'chr' prefix from input GTF file")
     LONG_PARAM("gtf-add-chr"   ,&addChrPrefix,    "Add 'chr' prefix from input GTF file")
-    LONG_PARAM("protein-coding", &proteinCodingOnly, "Load only protein-coding genes, searching for phrase 'gene_type \"protein-coding\"' from GTF")
+    LONG_MULTI_STRING_PARAM("gene-type", &genetypes, "Gene types to include to produce DGE matrix (e.g. protein-coding)")
+    LONG_PARAM("common-gene-types", &commonGenetypes, "Load only common gene types, searching for specific gene types - protein_coding, lincRNA, antisense, IG_ and TR_ genes")
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
@@ -126,11 +128,31 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     ++ibcd;
   }
   notice("Finished loading %d droplets, skipping %d.", ibcd, skipbcd);
-  //tsv_bcdf.close();  
+  //tsv_bcdf.close();
+
+  if ( commonGenetypes ) {
+    genetypes.push_back("protein_coding");
+    genetypes.push_back("lincRNA");
+    genetypes.push_back("antisense");
+    genetypes.push_back("IG_LV_gene");
+    genetypes.push_back("IG_V_gene");
+    genetypes.push_back("IG_LV_pseudogene");
+    genetypes.push_back("IG_D_gene");
+    genetypes.push_back("IG_J_gene");
+    genetypes.push_back("IG_J_pseudogene");
+    genetypes.push_back("IG_C_gene");
+    genetypes.push_back("IG_C_pseudogene");
+    genetypes.push_back("TR_V_gene");
+    genetypes.push_back("TR_V_pseudogene");
+    genetypes.push_back("TR_D_gene");
+    genetypes.push_back("TR_J_gene");
+    genetypes.push_back("TR_J_pseudogene");
+    genetypes.push_back("TR_C_gene");    
+  }
 
   // read GTF file
   notice("Opening GTF file %s...", gtfFile.c_str());
-  gtf inGTF(gtfFile.c_str(), proteinCodingOnly, addChrPrefix, removeChrPrefix);
+  gtf inGTF(gtfFile.c_str(), &genetypes, addChrPrefix, removeChrPrefix);
   notice("Finished reading GTF file %s...", gtfFile.c_str());
 
   // read the UMI information per each barcode
@@ -146,8 +168,10 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   
   for (int64_t line = 1; tsv_umif.read_line() > 0; ++line) {
     int32_t old_id = tsv_umif.int_field_at(0);
-    if ( id_cel2dge.find(old_id) == id_cel2dge.end() )
-      error("Cannot find barcode ID %s", old_id);
+    if ( id_cel2dge.find(old_id) == id_cel2dge.end() ) {
+      if ( skipbcd > 0 ) continue; // if anything was skipped, missing a specific ID is fine.
+      else error("Cannot find barcode ID %d", old_id);
+    }
     int32_t new_id = id_cel2dge[old_id];
 
     if ( line % 1000000 == 0 ) {
@@ -213,14 +237,14 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     if ( it->first == "gene" ) {
       for(int32_t i=0; i < (int32_t)vElems.size(); ++i) {
 	gtfGene* g = (gtfGene*)vElems[i];
-	hprintf(wgene,"%s %s\n", g->geneId.c_str(), g->geneName.c_str());
+	hprintf(wgene,"%s\t%s\n", g->geneId.c_str(), g->geneName.c_str());
       }
     }
     else if ( it->first == "transcript" ) {
       for(int32_t i=0; i < (int32_t)vElems.size(); ++i) {
 	gtfTranscript* t = (gtfTranscript*)vElems[i];
 	gtfGene*       g = (gtfGene*)t->parent;
-	hprintf(wgene,"%s %s:%s\n", t->transcriptId.c_str(), g->geneName.c_str(), t->transcriptId.c_str());
+	hprintf(wgene,"%s\t%s:%s\n", t->transcriptId.c_str(), g->geneName.c_str(), t->transcriptId.c_str());
       }      
     }
     else {
@@ -228,7 +252,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
 	gtfElement* e = vElems[i];
 	gtfTranscript* t = (gtfTranscript*)e->parent;
 	gtfGene*       g = (gtfGene*)t->parent;
-	hprintf(wgene,"%s:%s:%d-%d %s:%s:%s:%d-%d\n", t->transcriptId.c_str(), g->seqname.c_str(), e->locus.beg1, e->locus.end0, g->geneName.c_str(), t->transcriptId.c_str(), g->seqname.c_str(), e->locus.beg1, e->locus.end0);
+	hprintf(wgene,"%s:%s:%d-%d\t%s:%s:%s:%d-%d\n", t->transcriptId.c_str(), g->seqname.c_str(), e->locus.beg1, e->locus.end0, g->geneName.c_str(), t->transcriptId.c_str(), g->seqname.c_str(), e->locus.beg1, e->locus.end0);
       }
     }
     hts_close(wgene);

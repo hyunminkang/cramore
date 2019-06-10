@@ -26,7 +26,7 @@ gtfCDS::gtfCDS(int32_t _start, int32_t _end, const char* sframe, gtfElement* _pa
      error("[E:%s:%d:%s] Unrecognized frame string %s", __FILE__, __LINE__, __PRETTY_FUNCTION__, sframe);
 }
 
-gtf::gtf(const char* filename, bool proteinCodingOnly, bool addChrPrefix, bool removeChrPrefix) :
+gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrPrefix, bool removeChrPrefix) :
   maxGeneLength(0), maxTranscriptLength(0), maxExonLength(0),
   maxCDSLength(0), maxUTRLength(0), maxStartCodonLength(0),
   maxStopCodonLength(0)
@@ -37,16 +37,29 @@ gtf::gtf(const char* filename, bool proteinCodingOnly, bool addChrPrefix, bool r
   int nfields = 0;
   // read each line
   notice("Started reading GTF file %s...", filename);
-  int32_t line = 0;
+  int32_t line = 0, pass = 0;
   char seqname[65535];
+
+
+  std::set<std::string> sGenetypes;
+  if ( pGenetype != NULL ) {
+    for(int32_t i=0; i < (int)pGenetype->size(); ++i) {
+      sGenetypes.insert(pGenetype->at(i));
+    }
+  }
+  
   //int32_t nwarnings = 0;
+  int32_t nskiplines = 0;
   for( line = 0; ( nfields = tr.read_line() ) > 0; ++line) {
     if ( line % 1000000 == 0 )
       notice("Reading line %d from %s...", line, filename);
 
     // Process chromosome name
     const char* tmp_seqname = tr.str_field_at(0);    
-    if ( tmp_seqname[0] == '#' ) continue; // ignore meta lines
+    if ( tmp_seqname[0] == '#' ) {
+      ++nskiplines;
+      continue; // ignore meta lines
+    }
     if ( addChrPrefix ) {
       if ( strncmp(tmp_seqname,"chr",3) == 0 )
 	error("--gtf-add-chr option is on, but chr is already included in the chromosome name");
@@ -81,11 +94,34 @@ gtf::gtf(const char* filename, bool proteinCodingOnly, bool addChrPrefix, bool r
     const char* frame   = tr.str_field_at(7);
     const char* attr    = tr.str_field_at(8);
 
-    if ( proteinCodingOnly ) {
+    if ( !sGenetypes.empty() ) {
       // search for gene_type "protein_coding"
-      const char* pFind = strstr(attr, "gene_type \"protein_coding\"");
-      if ( pFind == NULL ) continue;
-    }    
+      //const char* pFind = strstr(attr, "gene_type \"protein_coding\"");
+      //if ( pFind == NULL ) continue;
+      const char* pGenetypeStart = strstr(attr, "gene_type \"");
+      if ( pGenetypeStart == NULL ) {
+	pGenetypeStart = strstr(attr, "gene_biotype \"");
+	if ( pGenetypeStart == NULL ) {
+	  error("Cannot find gene_type or gene_biotype from attrbute string %s", attr);
+	}
+	const char* pGenetypeEnd = strchr(pGenetypeStart+14,'"');
+	std::string geneType(pGenetypeStart+14,pGenetypeEnd-pGenetypeStart-14);
+	if ( sGenetypes.find(geneType) == sGenetypes.end() ) {
+	  continue;
+	}
+      }
+      else {
+         const char* pGenetypeEnd = strchr(pGenetypeStart+11,'"');
+         std::string geneType(pGenetypeStart+11,pGenetypeEnd-pGenetypeStart-11);
+         if ( sGenetypes.find(geneType) == sGenetypes.end() ) {
+	   continue;
+         }
+      }
+    }
+
+    ++pass;
+    if ( pass % 1000000 == 0 )
+      notice("%d of %d entries have matching gene types...", pass, line - nskiplines);
 
     // tokenize the attrbute string
     int32_t  nattrs = 0;
@@ -459,7 +495,7 @@ bool gtf::next() {
 int32_t gtf::findOverlappingElements(const char* seqname, int32_t start, int32_t end, std::set<gtfElement*>& results) {
   std::map<std::string, gtf_ivt_t>::iterator chr2ivt_it_t = chr2ivt.find(seqname);  
   if ( chr2ivt_it_t == chr2ivt.end() ) {
-    notice("WARNING: no overlapping elements in %s", seqname);
+    //notice("WARNING: no overlapping elements in %s", seqname);
     return 0;
   }
   gtf_ivt_t::gtf_interval_vector overlaps = chr2ivt_it_t->second.findOverlapping(start, end);

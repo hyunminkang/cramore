@@ -28,6 +28,7 @@ int32_t cmdCramSimulContam(int32_t argc, char** argv);
 int32_t cmdCramVerifyPairID(int32_t argc, char** argv);
 int32_t cmdCramDemuxlet(int32_t argc, char** argv);
 int32_t cmdCramFreemuxlet(int32_t argc, char** argv);
+int32_t cmdCramFreemux2(int32_t argc, char** argv);
 int32_t cmdCramMuxPileup(int32_t argc, char** argv);
 int32_t cmdCramDigitalPileup(int32_t argc, char** argv);
 int32_t cmdCramSimuxlet(int32_t argc, char** argv);
@@ -45,6 +46,7 @@ int32_t cmdScKallistoCount(int32_t argc, char** argv);
 
 int32_t cmdVcfMendelDupConc(int32_t argc, char** argv);
 int32_t cmdVcfSampleSummary(int32_t argc, char** argv);
+int32_t cmdVcfIBS0Summary(int32_t argc, char** argv);
 int32_t cmdVcfSqueeze(int32_t argc, char** argv);
 int32_t cmdVcfDeltaSVM(int32_t argc, char** argv);
 int32_t cmdVcfExtract(int32_t argc, char** argv);
@@ -54,6 +56,7 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv);
 int32_t cmdVcfUpdateSites(int32_t argc, char** argv);
 int32_t cmdVcfPasteCalls(int32_t argc, char** argv);
 int32_t cmdVcfMergeCandidateVariants(int32_t argc, char** argv);
+int32_t cmdVcfUpdateInfo(int32_t argc, char** argv);
 
 int32_t cmdBedDeltaSVMTrain(int32_t argc, char** argv);
 int32_t cmdBedMatchedShuffle(int32_t argc, char** argv);
@@ -78,8 +81,10 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND_GROUP("Processing BCF/VCF", NULL)
     LONG_COMMAND("mendel-dup-conc",&cmdVcfMendelDupConc, "Mendelian concordance analysis")
     LONG_COMMAND("vcf-sample-summary",&cmdVcfSampleSummary, "Sample-level summary from BCF/VCF")
+    LONG_COMMAND("vcf-ibs0-summary",&cmdVcfIBS0Summary, "IBS0 summary from BCF/VCF")    
     LONG_COMMAND("vcf-squeeze",&cmdVcfSqueeze, "Squeeze genotype fields from BCF/VCF")
     LONG_COMMAND("vcf-update-sites",&cmdVcfUpdateSites, "Update VCF site information")
+    LONG_COMMAND("vcf-update-info",&cmdVcfUpdateInfo,   "Update VCF INFO fields")    
     LONG_COMMAND("vcf-paste-calls",&cmdVcfPasteCalls, "Paste VCF calls produced by cram-dense-genotypes")
     LONG_COMMAND("vcf-merge-candidate-variants",&cmdVcfMergeCandidateVariants, "Merge candidate VCF sites produced by vt discover2")    
 
@@ -112,6 +117,7 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND_GROUP("Single cell analysis", NULL)
     LONG_COMMAND("demuxlet", &cmdCramDemuxlet, "Deconvolute sample identify of droplet-based sc-RNAseq")
     LONG_COMMAND("freemuxlet", &cmdCramFreemuxlet, "Genotype-free deconvolution of sc-RNAseq")
+    LONG_COMMAND("freemux2", &cmdCramFreemux2, "Rapid genotype-free deconvolution of sc-RNAseq")    
     LONG_COMMAND("mux-pileup", &cmdCramMuxPileup, "Produce pileup of dsc-RNAseq")
     LONG_COMMAND("dsc-pileup", &cmdCramDigitalPileup, "Produce pileup of dsc-RNAseq")    
     LONG_COMMAND("simuxlet",   &cmdCramSimuxlet,  "Simulate multiplexed dsc-RNAseq droplets")

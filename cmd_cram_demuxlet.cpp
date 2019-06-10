@@ -616,7 +616,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   //  hprintf(wpair,"BARCODE\tSM1.ID\tSM2.ID\tLLK12\tPOSTPRB\n");
   
   //hprintf(wbest,"BARCODE\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tBEST\tSNG.1ST\tSNG.LLK1\tSNG.2ND\tSNG.LLK2\tSNG.LLK0\tDBL.1ST\tDBL.2ND\tALPHA\tLLK12\tLLK1\tLLK2\tLLK10\tLLK20\tLLK00\tPRB.DBL\tPRB.SNG1\n");
-  hprintf(wbest, "BARCODE\tNUM.SNPS\tNUM.READS\tDROPLET.TYPE\tBEST.GUESS\tBEST.LLK\tNEXT.GUESS\tNEXT.LLK\tDIFF.LLK.BEST.NEXT\tBEST.POSTERIOR\tSNG.POSTERIOR\tSNG.BEST.GUESS\tSNG.BEST.LLK\tSNG.NEXT.GUESS\tSNG.NEXT.LLK\tSNG.ONLY.POSTERIOR\tDBL.BEST.GUESS\tDBL.BEST.LLK\tDIFF.LLK.SNG.DBL\n");
+  hprintf(wbest, "INT_ID\tBARCODE\tNUM.SNPS\tNUM.READS\tDROPLET.TYPE\tBEST.GUESS\tBEST.LLK\tNEXT.GUESS\tNEXT.LLK\tDIFF.LLK.BEST.NEXT\tBEST.POSTERIOR\tSNG.POSTERIOR\tSNG.BEST.GUESS\tSNG.BEST.LLK\tSNG.NEXT.GUESS\tSNG.NEXT.LLK\tSNG.ONLY.POSTERIOR\tDBL.BEST.GUESS\tDBL.BEST.LLK\tDIFF.LLK.SNG.DBL\n");
   
   //SINGLE.BEST.ID\tSINGLE.NEXT.ID\t
   //SM1.ID\tSM2.ID\tALPHA\tRD.TOTL\tRD.PASS\tRD.UNIQ\tN.SNP\tLLK12\tLLK1\tLLK0\tLLK10\tLLK00\tPOSTPRB\n");
@@ -980,7 +980,8 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     sngPP = exp(sngLLK - sumLLK);
     sngOnlyPP = exp(sngBestLLK + log_single_prior - sngLLK);
 
-    hprintf(wbest, "%s\t%u\t%d\t%s\t%s,%s,%.2lf\t%.2lf\t%s,%s,%.2lf\t%.2lf\t%.2lg\t%.2lg\t%s\t%.2lf\t%s\t%.2lf\t%.5lf\t%s,%s,%.2lf\t%.2lf\t%.2lf\n", 
+    hprintf(wbest, "%d\t%s\t%u\t%d\t%s\t%s,%s,%.2lf\t%.2lf\t%s,%s,%.2lf\t%.2lf\t%.2lf\t%.2lg\t%.2lg\t%s\t%.2lf\t%s\t%.2lf\t%.5lf\t%s,%s,%.2lf\t%.2lf\t%.2lf\n",
+	    ncells,
 	    it0->first.c_str(),
 	    scl.cell_umis[i].size(),
 	    scl.cell_uniq_reads[i],
@@ -988,6 +989,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
 	    vr.get_sample_id_at(jBest), vr.get_sample_id_at(kBest), gridAlpha[alphaBest],
 	    bestLLK,
 	    vr.get_sample_id_at(jNext), vr.get_sample_id_at(kNext), gridAlpha[alphaNext],
+	    nextLLK,
 	    bestLLK - nextLLK,
 	    bestPP,
 	    sngPP,
