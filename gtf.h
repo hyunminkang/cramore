@@ -187,7 +187,7 @@ public:
 class gtf {
 // transcript : gene
 public:
-  gtf(const char* gtfFile, std::vector<std::string>* pGenetypes = NULL, bool addChrPrefix = false, bool removeChrPrefix = false);
+  gtf(const char* gtfFile, std::vector<std::string>* pGenetypes = NULL, bool addChrPrefix = false, bool removeChrPrefix = false, bool createGeneTranscript = false);
   ~gtf();
 
   int32_t maxGeneLength;

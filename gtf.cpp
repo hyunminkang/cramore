@@ -26,7 +26,7 @@ gtfCDS::gtfCDS(int32_t _start, int32_t _end, const char* sframe, gtfElement* _pa
      error("[E:%s:%d:%s] Unrecognized frame string %s", __FILE__, __LINE__, __PRETTY_FUNCTION__, sframe);
 }
 
-gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrPrefix, bool removeChrPrefix) :
+gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrPrefix, bool removeChrPrefix, bool createGeneTranscript) :
   maxGeneLength(0), maxTranscriptLength(0), maxExonLength(0),
   maxCDSLength(0), maxUTRLength(0), maxStartCodonLength(0),
   maxStopCodonLength(0)
@@ -154,6 +154,43 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
     }
     
     std::string gid, tid, eid, name, type;
+    if ( createGeneTranscript ) { // create gene and transcript first before inserting the element. Caveat is that beg/end is misleading.
+      //notice("foo");
+      for(int32_t i=0; i < nattrs; ++i) {
+	if ( strncmp(&attr[attrFields[i]], "gene_id \"", 9) == 0 ) {
+	  gid.assign(&attr[attrFields[i]+9], attrFields[i+1]-attrFields[i]-12);
+	}
+	else if ( strncmp(&attr[attrFields[i]], "transcript_id \"", 15) == 0 ) {
+	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
+	}	  
+	else if ( strncmp(&attr[attrFields[i]], "gene_name \"", 11) == 0 ) {
+	  name.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-14);	  
+	}
+	else if ( strncmp(&attr[attrFields[i]], "gene_type \"", 11) == 0 ) {
+	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-14);	  
+	}
+	else if ( strncmp(&attr[attrFields[i]], "gene_biotype \"", 14) == 0 ) {
+	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-17);	  
+	}	  
+      }
+      auto git = gid2Gene.find(gid);
+      if ( git == gid2Gene.end() ) { // need to create gene. note that start and end is misleading (based on first appearing exon)
+	//notice("creating gene %s",gid.c_str());
+	addGene(seqname, start, end, strand, gid, name, type);  
+      }
+      //else {
+      // TODO : Need to modify git->second.locus and mmap to modify the region. Probably better to do this at the end.
+      //}
+      auto tit = tid2Transcript.find(tid);
+      if ( tit == tid2Transcript.end() ) { // need to create transcript. note that start and end is misleading
+	//notice("creating transcript %s",gid.c_str());	  
+	addTranscript(seqname, start, end, strand, gid, tid, type);
+      }
+      //else {
+      // TODO : Need to modify tit->second.locus and mmap to modify the region. Probably better to do this at the end.
+      //}      
+    }
+    
     if ( strcmp(feature,"gene") == 0 ) {
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "gene_id \"", 9) == 0 ) {
@@ -165,6 +202,9 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
 	else if ( strncmp(&attr[attrFields[i]], "gene_type \"", 11) == 0 ) {
 	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-14);	  
 	}
+	else if ( strncmp(&attr[attrFields[i]], "gene_biotype \"", 14) == 0 ) {
+	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-17);	  
+	}	
       }
       addGene(seqname, start, end, strand, gid, name, type);
     }

@@ -19,6 +19,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   int32_t minCoveredSNPs = 0;
   bool removeChrPrefix = false;
   bool addChrPrefix = false;
+  bool createGeneTranscript = false;
   std::vector<std::string> genetypes;
   bool commonGenetypes = false;
 
@@ -32,6 +33,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     LONG_PARAM("gtf-add-chr"   ,&addChrPrefix,    "Add 'chr' prefix from input GTF file")
     LONG_MULTI_STRING_PARAM("gene-type", &genetypes, "Gene types to include to produce DGE matrix (e.g. protein-coding)")
     LONG_PARAM("common-gene-types", &commonGenetypes, "Load only common gene types, searching for specific gene types - protein_coding, lincRNA, antisense, IG_ and TR_ genes")
+    LONG_PARAM("create-gene-transcript",&createGeneTranscript, "Create genes and transcripts if not exist in GTF")
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
@@ -152,7 +154,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
 
   // read GTF file
   notice("Opening GTF file %s...", gtfFile.c_str());
-  gtf inGTF(gtfFile.c_str(), &genetypes, addChrPrefix, removeChrPrefix);
+  gtf inGTF(gtfFile.c_str(), &genetypes, addChrPrefix, removeChrPrefix, createGeneTranscript);
   notice("Finished reading GTF file %s...", gtfFile.c_str());
 
   // read the UMI information per each barcode
