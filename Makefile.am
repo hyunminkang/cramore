@@ -87,6 +87,7 @@ cramore_SOURCES = cramore.cpp \
 	cmd_plp_make_dge_matrix.cpp \
 	cmd_plp_find_mux_clust.cpp \
 	cmd_vcf_ibs0_summary.cpp compact_matrix.cpp \
-	cmd_vcf_update_info.cpp
+	cmd_vcf_update_info.cpp \
+	cmd_dge_barcode_summary.cpp dsc_dge.cpp
 
 cramore_LDADD = $(ALL_LDFLAGS) $(HTSLIB_LIB) $(ALL_LIBS)

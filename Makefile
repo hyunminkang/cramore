@@ -153,7 +153,8 @@ am_cramore_OBJECTS = cramore.$(OBJEXT) Error.$(OBJEXT) \
 	cmd_plp_make_dge_matrix.$(OBJEXT) \
 	cmd_plp_find_mux_clust.$(OBJEXT) \
 	cmd_vcf_ibs0_summary.$(OBJEXT) compact_matrix.$(OBJEXT) \
-	cmd_vcf_update_info.$(OBJEXT)
+	cmd_vcf_update_info.$(OBJEXT) \
+	cmd_dge_barcode_summary.$(OBJEXT) dsc_dge.$(OBJEXT)
 cramore_OBJECTS = $(am_cramore_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
@@ -652,7 +653,8 @@ cramore_SOURCES = cramore.cpp \
 	cmd_plp_make_dge_matrix.cpp \
 	cmd_plp_find_mux_clust.cpp \
 	cmd_vcf_ibs0_summary.cpp compact_matrix.cpp \
-	cmd_vcf_update_info.cpp
+	cmd_vcf_update_info.cpp \
+	cmd_dge_barcode_summary.cpp dsc_dge.cpp
 
 cramore_LDADD = $(ALL_LDFLAGS) $(HTSLIB_LIB) $(ALL_LIBS)
 all: config.h
@@ -799,6 +801,7 @@ include ./$(DEPDIR)/cmd_cram_sparse_genotype.Po
 include ./$(DEPDIR)/cmd_cram_update_rg.Po
 include ./$(DEPDIR)/cmd_cram_verify_bam.Po
 include ./$(DEPDIR)/cmd_cram_verify_pair_id.Po
+include ./$(DEPDIR)/cmd_dge_barcode_summary.Po
 include ./$(DEPDIR)/cmd_fasta_gc_content.Po
 include ./$(DEPDIR)/cmd_plp_find_mux_clust.Po
 include ./$(DEPDIR)/cmd_plp_make_dge_matrix.Po
@@ -825,6 +828,7 @@ include ./$(DEPDIR)/compact_matrix.Po
 include ./$(DEPDIR)/contam_estimator.Po
 include ./$(DEPDIR)/cramore.Po
 include ./$(DEPDIR)/dropseq.Po
+include ./$(DEPDIR)/dsc_dge.Po
 include ./$(DEPDIR)/estimator.Po
 include ./$(DEPDIR)/fastaGC.Po
 include ./$(DEPDIR)/filter.Po

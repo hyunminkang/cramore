@@ -39,6 +39,7 @@ int32_t cmdCramFlagStat(int32_t argc, char** argv);
 int32_t cmdCramCompareBQs(int32_t argc, char** argv);
 int32_t cmdCramContextIndelAnalysis(int32_t argc, char** argv);
 
+int32_t cmdDgeBarcodeSummary(int32_t argc, char** argv);
 int32_t cmdScMultinomEM(int32_t argc, char** argv);
 int32_t cmdScMultinomGibbs(int32_t argc, char** argv);
 int32_t cmdScMapSTAMPs(int32_t argc, char** argv);
@@ -125,7 +126,8 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("sc-map-stamps", &cmdScMapSTAMPs, "Produce STAMP-map from DropSeq FASTQ files")
     LONG_COMMAND("sc-multinom-em", &cmdScMultinomEM, "Multinomial EM clustering of single cell types")
     LONG_COMMAND("sc-multinom-gibbs", &cmdScMultinomGibbs, "Multinomial Gibbs sampling of single cell types")
-    LONG_COMMAND("plp-find-mux-clust", &cmdPlpFindMuxClust, "(Experimental) Perform tSNE clustering on mux-seq data")    
+    LONG_COMMAND("plp-find-mux-clust", &cmdPlpFindMuxClust, "(Experimental) Perform tSNE clustering on mux-seq data")
+    LONG_COMMAND("dge-barcode-summary", &cmdDgeBarcodeSummary, "Summarize digital expression matrix")    
 
     LONG_COMMAND_GROUP("Other tools", NULL)
     LONG_COMMAND("bed-matched-shuffle",&cmdBedMatchedShuffle, "Shuffle BED regions adjusting for GC contents and repeats")
