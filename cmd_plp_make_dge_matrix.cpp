@@ -22,6 +22,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   bool createGeneTranscript = false;
   std::vector<std::string> genetypes;
   bool commonGenetypes = false;
+  int32_t uniqBin = 1000000;
 
   paramList pl;
 
@@ -37,6 +38,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outPrefix,"Output file prefix")
+    LONG_INT_PARAM("uniq-bin",&uniqBin,"Bin size to uniquely count a UMI into a single gene")
     LONG_INT_PARAM("verbose", &globalVerbosityThreshold, "Turn on verbose mode with specific verbosity threshold. 0: fully verbose, 100 : no verbose messages")
 
     LONG_PARAM_GROUP("Cell/droplet filtering options", NULL)
@@ -167,14 +169,15 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   // count every possible GTF elements
   std::map<gtfElement*, std::map<int32_t,int32_t> > dgeMap;
   std::map<std::string, int64_t> typeCount;
-  
-  for (int64_t line = 1; tsv_umif.read_line() > 0; ++line) {
-    int32_t old_id = tsv_umif.int_field_at(0);
+
+  // core routine to build DGE matrix
+  for (int64_t line = 1; tsv_umif.read_line() > 0; ++line) {  // Process each UMI separately. UMIs will typically have multiple regions
+    int32_t old_id = tsv_umif.int_field_at(0);                // old_id is the barcode id encoeded in the [prefix].umi.gz file
     if ( id_cel2dge.find(old_id) == id_cel2dge.end() ) {
       if ( skipbcd > 0 ) continue; // if anything was skipped, missing a specific ID is fine.
       else error("Cannot find barcode ID %d", old_id);
     }
-    int32_t new_id = id_cel2dge[old_id];
+    int32_t new_id = id_cel2dge[old_id];                      // new_id is the new barcode id 
 
     if ( line % 1000000 == 0 ) {
       notice("Processing %d UMIs over %d barcodes", line, new_id);
@@ -183,13 +186,13 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     // parse the current UMI to add to the current gene count profile
     // for processing the current UMI, genes, transcripts, and exons are only counted once each time
     std::set<gtfElement*> sElems; // store every element in GTF field for the UMI
-    for(int32_t j=3; j < tsv_umif.nfields; ++j) {
-      posLocus::parseRegion(tsv_umif.str_field_at(j), chrom, beg1, end0);
+    for(int32_t j=3; j < tsv_umif.nfields; ++j) {                          // UMI have multiple regions
+      posLocus::parseRegion(tsv_umif.str_field_at(j), chrom, beg1, end0);  // For each region, identify all overlapping elements
       inGTF.findOverlappingElements(chrom.c_str(), beg1, end0, sElems);
     }
 
     // focus only on exons
-    std::set<gtfElement*> umiElems;
+    std::set<gtfElement*> umiElems;              // umiElems is the unique elements
     for(std::set<gtfElement*>::iterator it = sElems.begin(); it != sElems.end(); ++it) {
       if ( (*it)->type == "exon" ) {
 	umiElems.insert(*it);                   // insert the exon
@@ -198,9 +201,22 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
       }
     }
 
+    std::set<std::string> locusUsed;
+    char buf[65536];
     for(std::set<gtfElement*>::iterator it = umiElems.begin(); it != umiElems.end(); ++it) {
-      ++(dgeMap[*it][new_id]);
-      ++typeCount[(*it)->type];
+      if ( (*it)->type == "gene" ) { // make uniq-gene matrix (to prevent gene double counting)
+	gtfGene* gg = (gtfGene*)(*it);
+	sprintf(buf, "%s:%d", gg->seqname.c_str(), (gg->locus.beg1 + gg->locus.end0) / (uniqBin / 2));
+	if ( locusUsed.find(buf) == locusUsed.end() ) { // if the locus was not used
+	  ++(dgeMap[*it][new_id]);
+	  ++typeCount[(*it)->type];
+	  locusUsed.insert(buf);
+	}
+      }
+      else {                        // transcript and exons are still double-counted
+	++(dgeMap[*it][new_id]);
+	++typeCount[(*it)->type];
+      }
     }
   }
 
@@ -284,7 +300,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     int32_t igene = mapElems[e->type][e] + 1;
     htsFile* hf = mtxFiles[e->type];
     for(std::map<int32_t,int32_t>::iterator jt = it->second.begin(); jt != it->second.end(); ++jt) {
-												    hprintf(hf, "%d %d %d\n", igene, jt->first + 1, jt->second);
+      hprintf(hf, "%d %d %d\n", igene, jt->first + 1, jt->second);
     }
     ++nelems;
   }
