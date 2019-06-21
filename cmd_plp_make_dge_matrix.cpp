@@ -201,16 +201,24 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
       }
     }
 
-    std::set<std::string> locusUsed;
+    std::map<std::string,gtfElement*> locusUsed;
     char buf[65536];
     for(std::set<gtfElement*>::iterator it = umiElems.begin(); it != umiElems.end(); ++it) {
       if ( (*it)->type == "gene" ) { // make uniq-gene matrix (to prevent gene double counting)
 	gtfGene* gg = (gtfGene*)(*it);
 	sprintf(buf, "%s:%d", gg->seqname.c_str(), (gg->locus.beg1 + gg->locus.end0) / (uniqBin / 2));
-	if ( locusUsed.find(buf) == locusUsed.end() ) { // if the locus was not used
+	std::map<std::string,gtfElement*>::iterator it2 = locusUsed.find(buf);
+	if ( it2 == locusUsed.end() ) { // if the locus was not used
 	  ++(dgeMap[*it][new_id]);
 	  ++typeCount[(*it)->type];
-	  locusUsed.insert(buf);
+	  locusUsed[buf] = *it;
+	}
+	else {   // resolve ties based on gene names
+	  if ( gg->geneId < ((gtfGene*)it2->second)->geneId ) { // replace to the gene with lexicographically smaller one
+	    --(dgeMap[it2->second][new_id]);
+	    ++(dgeMap[*it][new_id]);
+	    locusUsed[buf] = *it;	    
+	  }
 	}
       }
       else {                        // transcript and exons are still double-counted
