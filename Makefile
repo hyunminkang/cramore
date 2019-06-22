@@ -154,7 +154,8 @@ am_cramore_OBJECTS = cramore.$(OBJEXT) Error.$(OBJEXT) \
 	cmd_plp_find_mux_clust.$(OBJEXT) \
 	cmd_vcf_ibs0_summary.$(OBJEXT) compact_matrix.$(OBJEXT) \
 	cmd_vcf_update_info.$(OBJEXT) \
-	cmd_dge_barcode_summary.$(OBJEXT) dsc_dge.$(OBJEXT)
+	cmd_dge_barcode_summary.$(OBJEXT) dsc_dge.$(OBJEXT) \
+	cmd_cram_dsc_pileup.$(OBJEXT)
 cramore_OBJECTS = $(am_cramore_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
@@ -654,7 +655,8 @@ cramore_SOURCES = cramore.cpp \
 	cmd_plp_find_mux_clust.cpp \
 	cmd_vcf_ibs0_summary.cpp compact_matrix.cpp \
 	cmd_vcf_update_info.cpp \
-	cmd_dge_barcode_summary.cpp dsc_dge.cpp
+	cmd_dge_barcode_summary.cpp dsc_dge.cpp \
+	cmd_cram_dsc_pileup.cpp 
 
 cramore_LDADD = $(ALL_LDFLAGS) $(HTSLIB_LIB) $(ALL_LIBS)
 all: config.h
@@ -789,6 +791,7 @@ include ./$(DEPDIR)/cmd_cram_context_indel_analysis.Po
 include ./$(DEPDIR)/cmd_cram_demuxlet.Po
 include ./$(DEPDIR)/cmd_cram_dense_genotype.Po
 include ./$(DEPDIR)/cmd_cram_digital_pileup.Po
+include ./$(DEPDIR)/cmd_cram_dsc_pileup.Po
 include ./$(DEPDIR)/cmd_cram_flagstat.Po
 include ./$(DEPDIR)/cmd_cram_freemux2.Po
 include ./$(DEPDIR)/cmd_cram_freemuxlet.Po

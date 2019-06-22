@@ -553,3 +553,25 @@ int32_t gtf::findOverlappingElements(const char* seqname, int32_t start, int32_t
   }
   return 0;
 }
+
+int32_t gtf::findOverlappingElements(const char* seqname, int32_t start, int32_t end, bool fwdStrand, std::set<gtfElement*>& results) {
+  std::map<std::string, gtf_ivt_t>::iterator chr2ivt_it_t = chr2ivt.find(seqname);  
+  if ( chr2ivt_it_t == chr2ivt.end() ) {
+    return 0;
+  }
+  gtf_ivt_t::gtf_interval_vector overlaps = chr2ivt_it_t->second.findOverlapping(start, end);
+  for(int32_t i=0; i < (int32_t)overlaps.size(); ++i) {
+    const gtf_ivt_t::gtf_interval& iv = overlaps[i];
+    gtfElement* e = iv.value;
+    gtfElement* root = e;
+    while( root->parent != NULL )
+      root = root->parent;
+    gtfGene* rootGene = (gtfGene*)root;
+    if ( rootGene->fwdStrand == fwdStrand ) {  // check strand and insert only consistent ones
+      results.insert(iv.value);
+    }
+    //notice("Query = %s:%d-%d, Found %s:%d-%d, Type = %s, Gene ID = %s, Gene Name = %s, Gene Type = %s", seqname, start, end, seqname, iv.start, iv.stop, e->type.c_str(), rootGene->geneId.c_str(), rootGene->geneName.c_str(), rootGene->geneType.c_str());
+    
+  }
+  return 0;
+}

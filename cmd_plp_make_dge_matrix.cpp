@@ -22,7 +22,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   bool createGeneTranscript = false;
   std::vector<std::string> genetypes;
   bool commonGenetypes = false;
-  int32_t uniqBin = 1000000;
+  int32_t uniqBin = 1000000000;
 
   paramList pl;
 
@@ -165,6 +165,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
   tsv_reader tsv_umif(fname);
   std::string chrom;
   int32_t beg1, end0;
+  bool fwdStrand;
 
   // count every possible GTF elements
   std::map<gtfElement*, std::map<int32_t,int32_t> > dgeMap;
@@ -186,13 +187,16 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     // parse the current UMI to add to the current gene count profile
     // for processing the current UMI, genes, transcripts, and exons are only counted once each time
     std::set<gtfElement*> sElems; // store every element in GTF field for the UMI
-    for(int32_t j=3; j < tsv_umif.nfields; ++j) {                          // UMI have multiple regions
-      posLocus::parseRegion(tsv_umif.str_field_at(j), chrom, beg1, end0);  // For each region, identify all overlapping elements
-      inGTF.findOverlappingElements(chrom.c_str(), beg1, end0, sElems);
+    //for(int32_t j=3; j < tsv_umif.nfields; ++j) {                        // UMI have multiple regions
+    for(int32_t j=4; j < tsv_umif.nfields; ++j) {                          // UMI have multiple regions      
+      //posLocus::parseRegion(tsv_umif.str_field_at(j), chrom, beg1, end0);  // For each region, identify all overlapping elements
+      //inGTF.findOverlappingElements(chrom.c_str(), beg1, end0, sElems);
+      posLocus::parseBegLenStrand(tsv_umif.str_field_at(j), chrom, beg1, end0, fwdStrand);  // For each region, identify all overlapping elements
+      inGTF.findOverlappingElements(chrom.c_str(), beg1, end0, fwdStrand, sElems);          // considering strand information
     }
 
     // focus only on exons
-    std::set<gtfElement*> umiElems;              // umiElems is the unique elements
+    std::set<gtfElement*> umiElems;             // umiElems is the unique elements
     for(std::set<gtfElement*>::iterator it = sElems.begin(); it != sElems.end(); ++it) {
       if ( (*it)->type == "exon" ) {
 	umiElems.insert(*it);                   // insert the exon

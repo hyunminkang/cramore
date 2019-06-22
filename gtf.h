@@ -119,6 +119,22 @@ class posLocus {
     }
     return true;
   }
+
+  // parse a string in [chr]:[beg1]-[end0] format 
+  static bool parseBegLenStrand(const char* region, std::string& chrom, int32_t& beg1, int32_t& end0, bool& fwdStrand) {
+    char buf[255];
+    strcpy(buf,region);
+    const char* pcolon1 = strchr(region,':');
+    const char* pcolon2 = strchr(pcolon1+1,':');
+    const char* pcolon3 = strchr(pcolon2+1,':');    
+    if ( pcolon1 == NULL )
+      error("Cannot parse %s in genomeLocus::genomeLocus()");
+    chrom.assign(region,0,pcolon1-region);
+    beg1 = atoi(pcolon1+1);
+    end0 = beg1 + atoi(pcolon2+1) - 1;
+    fwdStrand = ((pcolon3 != NULL) && (pcolon3[1] == '-')) ? false : true;
+    return true;
+  }  
 };
 
 class gtfGene;
@@ -250,6 +266,7 @@ public:
   bool checkTranscriptSanity(std::string& tid, const char* seqname, const char* strand);
 
   int32_t findOverlappingElements(const char* seqname, int32_t start, int32_t end, std::set<gtfElement*>& results);
+  int32_t findOverlappingElements(const char* seqname, int32_t start, int32_t end, bool fwdStrand, std::set<gtfElement*>& results);  
 };
 
 #endif
