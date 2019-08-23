@@ -123,7 +123,9 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
     if ( pass % 1000000 == 0 )
       notice("%d of %d entries have matching gene types...", pass, line - nskiplines);
 
+    gtfEntryParser gep(attr);
     // tokenize the attrbute string
+    /*
     int32_t  nattrs = 0;
     int32_t* attrFields;
     kstring_t kattr;
@@ -133,6 +135,7 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
     --nattrs;
     for(int32_t i=1; i < nattrs; ++i) 
       ++attrFields[i];
+    */
 
     //bool fwdStrand = ( strand[0] == '-' ) ? false : true;
 
@@ -156,6 +159,13 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
     std::string gid, tid, eid, name, type;
     if ( createGeneTranscript ) { // create gene and transcript first before inserting the element. Caveat is that beg/end is misleading.
       //notice("foo");
+      gid = gep.get("gene_id");
+      tid = gep.get("transcript_id");
+      name = gep.get("gene_name");
+      if ( name.empty() ) name = gid;
+      type = gep.get("gene_type");
+      if ( type.empty() ) type = gep.get("gene_biotype");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "gene_id \"", 9) == 0 ) {
 	  gid.assign(&attr[attrFields[i]+9], attrFields[i+1]-attrFields[i]-12);
@@ -171,8 +181,9 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
 	}
 	else if ( strncmp(&attr[attrFields[i]], "gene_biotype \"", 14) == 0 ) {
 	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-17);	  
-	}	  
+	}
       }
+      */
       auto git = gid2Gene.find(gid);
       if ( git == gid2Gene.end() ) { // need to create gene. note that start and end is misleading (based on first appearing exon)
 	//notice("creating gene %s",gid.c_str());
@@ -192,6 +203,12 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
     }
     
     if ( strcmp(feature,"gene") == 0 ) {
+      gid = gep.get("gene_id");
+      name = gep.get("gene_name");
+      if ( name.empty() ) name = gid;
+      type = gep.get("gene_type");
+      if ( type.empty() ) type = gep.get("gene_biotype");      
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "gene_id \"", 9) == 0 ) {
 	  gid.assign(&attr[attrFields[i]+9], attrFields[i+1]-attrFields[i]-12);
@@ -206,9 +223,14 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
 	  type.assign(&attr[attrFields[i]+11], attrFields[i+1]-attrFields[i]-17);	  
 	}	
       }
+      */
       addGene(seqname, start, end, strand, gid, name, type);
     }
     else if ( strcmp(feature,"transcript") == 0 ) {
+      gid = gep.get("gene_id");
+      tid = gep.get("transcript_id");
+      type = gep.get("transcript_type");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "gene_id \"", 9) == 0 ) {
 	  gid.assign(&attr[attrFields[i]+9], attrFields[i+1]-attrFields[i]-12);
@@ -220,10 +242,14 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
 	  type.assign(&attr[attrFields[i]+17], attrFields[i+1]-attrFields[i]-20);	  
 	}
       }
+      */
       //notice("%s %d %d %s %s %s %s\n%s",seqname, start, end, strand, gid.c_str(), tid.c_str(), type.c_str(), attr);
       addTranscript(seqname, start, end, strand, gid, tid, type);
     }
     else if ( strcmp(feature,"exon") == 0 ) {
+      tid = gep.get("transcript_id");      
+      eid = gep.get("exon_id");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "exon_id \"", 9) == 0 ) {
 	  eid.assign(&attr[attrFields[i]+9], attrFields[i+1]-attrFields[i]-12);
@@ -232,41 +258,54 @@ gtf::gtf(const char* filename, std::vector<std::string>* pGenetype, bool addChrP
 	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
 	}
       }
+      */
       addExon(seqname, start, end, strand, tid);
     }
     else if ( strcmp(feature,"UTR") == 0 ) {
+      tid = gep.get("transcript_id");      
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "transcript_id \"", 15) == 0 ) {
 	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
 	}
       }
+      */
       addUTR(seqname, start, end, strand, tid);
     }
     else if ( strcmp(feature,"CDS") == 0 ) {
+      tid = gep.get("transcript_id");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "transcript_id \"", 15) == 0 ) {
 	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
 	}
       }
+      */
       addCDS(seqname, start, end, strand, frame, tid);
     }
     else if ( strcmp(feature,"start_codon") == 0 ) {
+      tid = gep.get("transcript_id");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "transcript_id \"", 15) == 0 ) {
 	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
 	}
       }
+      */
       addStartCodon(seqname, start, end, strand, tid);
     }
     else if ( strcmp(feature,"stop_codon") == 0 ) {
+      tid = gep.get("transcript_id");
+      /*
       for(int32_t i=0; i < nattrs; ++i) {
 	if ( strncmp(&attr[attrFields[i]], "transcript_id \"", 15) == 0 ) {
 	  tid.assign(&attr[attrFields[i]+15], attrFields[i+1]-attrFields[i]-18);	  
 	}
       }
+      */
       addStopCodon(seqname, start, end, strand, tid);
     }
-    free(kattr.s);
+    //free(kattr.s);
 
     //notice("end of loop");    
   }

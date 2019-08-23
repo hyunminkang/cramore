@@ -3,7 +3,8 @@
 void BCFFilteredReader::init_params() {
   if ( bcf_file_name.empty() )
     error("[%s:%d %s] bcf_file_name is empty", __FILE__, __LINE__, __PRETTY_FUNCTION__);
-    
+
+  // if target interval list exists
   if ( !target_interval_list.empty() ) {
     // stat processing the target region
     genomeLocus* tmp_target_locus = NULL;
@@ -676,6 +677,7 @@ int32_t BCFFilteredReader::clear_buffer_before(const char* chr, int32_t pos1) {
 }
   
 bcf1_t* BCFFilteredReader::read() {
+  //notice("bcf_filtered_reader::read() called");
   n_gts = 0; n_pls = 0; n_dss = 0; n_flds = 0;
   
   if ( ( unlimited_buffer ) && ( nbuf == (int32_t)vbufs.size() ) ) {
@@ -698,7 +700,7 @@ bcf1_t* BCFFilteredReader::read() {
   }
   ++nbuf;
 
-  if ( mode_extract ) {
+  if ( mode_extract ) {   // this applies to only vcf-extract mode
     if ( variants2extract.empty() ) {
       vidx = (vidx + vbufs.size() - 1) % vbufs.size(); 
       eof = true;
@@ -752,7 +754,7 @@ bcf1_t* BCFFilteredReader::read() {
       return read();
     }
   }
-  else {
+  else {  // non vcf-extract mode
     while( cdr.read(vbufs[vidx]) ) {
       ++nRead;
       if ( nRead % verbose == 0 )

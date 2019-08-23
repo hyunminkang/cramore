@@ -153,6 +153,53 @@ public:
   //virtual void printElement();
 };
 
+class gtfEntryParser {
+public:
+  std::map<std::string,std::string> dict;
+  std::string empty;
+  
+  std::string get(const char* key) {
+    std::map<std::string,std::string>::iterator it = dict.find(key);
+    if ( it != dict.end() ) { return it->second; }
+    else { return empty; }
+  }
+  
+  gtfEntryParser(const char* s) {
+    const char* p = s;  // cursor
+    const char* c = p;  // beginning of item
+    char delim = ';';
+    char space = ' ';
+    std::string key, val;
+    while( *p != '\0' ) {
+      if ( *p == delim ) { // delimiter found
+	// c to p-1 is a valid string
+	int32_t n = p - c;
+	if ( ( c[0] == '"' ) && ( c[n-1] == '"' ) ) {
+	  val.assign(c+1,n-2); // take n-2 characters
+	}
+	else {  // if no quotes
+	  val.assign(c,n);
+	}
+	dict[key] = val; // fill in the dict
+	c = p+1; // set the start of next item
+	while ( ( *c != '\0' ) && ( *c == space ) ) ++c; // consume whitespaces
+	p = c;
+      }
+      else if ( *p == space ) {
+	// c to p-1 is a valid string
+	int32_t n = p - c;
+	key.assign(c, n);
+	c = p+1; // set the start of next item
+	while ( ( *c != '\0' ) && ( *c == space ) ) ++c; // consume whitespaces
+	p = c; // update p	
+      }
+      else {
+	++p;  // advance
+      }
+    }
+  }
+};
+
 struct gtfComp {
   bool operator()(const gtfElement* lhs, const gtfElement* rhs) const {
     if ( lhs->locus == rhs->locus ) {

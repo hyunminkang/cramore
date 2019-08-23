@@ -13,21 +13,24 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   std::string outPrefix;
   std::string plpPrefix;
   std::string initClusterFile;
-  int32_t capBQ = 40;
+  int32_t capBQ = 20;
   int32_t minBQ = 13;
   //std::vector<double> gridAlpha;
   double doublet_prior = 0.5;
   double geno_error = 0.0;
   std::string groupList;
   int32_t minTotalReads = 0;
-  int32_t minUniqReads = 0;
+  int32_t minUMIs = 0;
   int32_t minCoveredSNPs = 0;
   int32_t nSamples = 0;
+  double singletScoreThres = -1e300;
   double bfThres = 5.41;
   double fracInitClust = 1.00; // use 50% of cells for initial clustering
   bool auxFiles = false;
   int32_t initIteration = 10;
   bool keepInitMissing = false;
+  bool randomizeSingletScore = false;
+  int32_t randomSeed = 0;
 
   paramList pl;
 
@@ -49,7 +52,9 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
     LONG_DOUBLE_PARAM("bf-thres",&bfThres,"Bayes Factor Threshold used in the initial clustering")
     LONG_DOUBLE_PARAM("frac-init-clust",&fracInitClust,"Fraction of droplets to be clustered in the very first round of initial clustering procedure")
     LONG_INT_PARAM("iter-init",&initIteration, "Iteration for initial cluster assignment (set to zero to skip the iterations)")
-    LONG_PARAM("keep-init-missing",&keepInitMissing, "Keep missing cluster assignment as missing in the initial iteration")    
+    LONG_PARAM("keep-init-missing",&keepInitMissing, "Keep missing cluster assignment as missing in the initial iteration")
+    LONG_PARAM("randomize-singlet-score",&randomizeSingletScore, "Randomize the singlet scores to test its effect")
+    LONG_INT_PARAM("seed",&randomSeed,"Seed for random number (use clocks if not set)")
     
     LONG_PARAM_GROUP("Read filtering Options", NULL)
     LONG_INT_PARAM("cap-BQ", &capBQ, "Maximum base quality (higher BQ will be capped)")
@@ -58,7 +63,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
     LONG_PARAM_GROUP("Cell/droplet filtering options", NULL)
     LONG_STRING_PARAM("group-list",&groupList, "List of tag readgroup/cell barcode to consider in this run. All other barcodes will be ignored. This is useful for parallelized run")    
     LONG_INT_PARAM("min-total", &minTotalReads, "Minimum number of total reads for a droplet/cell to be considered")
-    LONG_INT_PARAM("min-uniq", &minUniqReads, "Minimum number of unique reads (determined by UMI/SNP pair) for a droplet/cell to be considered")
+    LONG_INT_PARAM("min-umi",   &minUMIs, "Minimum number of UMIs for a droplet/cell to be considered")
     LONG_INT_PARAM("min-snp", &minCoveredSNPs, "Minimum number of SNPs with coverage for a droplet/cell to be considered")
   END_LONG_PARAMS();
 
@@ -69,8 +74,15 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   if ( plpPrefix.empty() || outPrefix.empty() || ( nSamples == 0 ) )
     error("Missing required option(s) : --plp, --out, --nsample");
 
-  std::set<std::string> bcdSet;
   sc_dropseq_lib_t scl;
+  scl.minRead = minTotalReads;
+  scl.minUMI  = minUMIs;
+  scl.minSNP  = minCoveredSNPs;
+  scl.capBQ   = capBQ;
+  scl.minBQ   = minBQ;  
+  if ( !groupList.empty() ) {
+    scl.load_valid_barcodes(groupList.c_str());
+  }
 
   scl.load_from_plp(plpPrefix.c_str());
 
@@ -97,7 +109,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   std::vector<int32_t> nReads(scl.nbcs,0);  
 
   wmix = hts_open((outPrefix+".lmix").c_str(),"w");
-  hprintf(wmix, "INT_ID\tBARCODE\tNSNPs\tNREADs\tDBL.LLK\tSNG.LLK\tLOG.BF\tBFpSNP\n");
+  hprintf(wmix, "INT_ID\tBARCODE\tNSNPs\tNREADs\tDBL.LLK\tSNG.LLK\tBF.SINGLET\tBF.SINGLET.PER.SNP\n");
   
   std::vector< std::map<int32_t,snp_droplet_pileup*> > cell_snp_plps(scl.nbcs);
   std::vector< std::map<int32_t,snp_droplet_pileup*> > snp_cell_plps(scl.nsnps);
@@ -146,9 +158,27 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 
     scl.cell_scores[si] = llk2 - llk0;  // score of being singlet
 
-    hprintf(wmix,"%d\t%s\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, scl.bcs[si].c_str(), nSNPs[i], nReads[i], llk0, llk2, llk0-llk2, (llk0-llk2)/nSNPs[i]);
+    hprintf(wmix,"%d\t%s\t%d\t%d\t%.2lf\t%.2lf\t%.2lf\t%.4lf\n", si, scl.bcs[si].c_str(), nSNPs[i], nReads[i], llk0, llk2, llk2-llk0, (llk2-llk0)/nSNPs[i]);
   }
   hts_close(wmix);
+
+  if ( randomSeed == 0 )
+    srand(std::time(0));
+  else
+    srand(randomSeed);
+
+  // randomize singlet scores
+  if ( randomizeSingletScore ) {
+    for(int32_t i=0; i < scl.nbcs-1; ++i) {
+      // randomly pick from [i, scl.nbcs)
+      int32_t j = i + rand() % (scl.nbcs-i);
+      if ( i < j ) {
+	double tmp = scl.cell_scores[j];
+	scl.cell_scores[j] = scl.cell_scores[i];
+	scl.cell_scores[i] = tmp;
+      }
+    }
+  }
 
   // sort droplets by singlet scores
   std::vector<int32_t> drops_srted(scl.nbcs);
@@ -160,7 +190,8 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 
 
   std::vector<int32_t> clusts(scl.nbcs,-1);
-  std::vector<int32_t> ccounts(nSamples,0);  
+  std::vector<int32_t> ccounts(nSamples,0);
+  std::vector<int32_t> types(scl.nbcs,-1);  
   // initial clustering
   // calculate pairwise genetic distances on demand while clustering
   // use the assigned clusters if already provided
@@ -175,6 +206,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
       }
       else {
 	clusts[i] = it->second;
+	types[i] = 0;
 	++ccounts[it->second];
       }
     }
@@ -190,7 +222,8 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
     double sumMaxScore = 0;
     for(int32_t i=0; i < scl.nbcs; ++i) {
       int32_t si = drops_srted[i];
-      if ( i > scl.nbcs * fracInitClust ) continue; // skip the droplet if exceed initial fraction of cells to be clustered.
+      if ( i > scl.nbcs * fracInitClust ) continue;   // skip the droplet if exceed initial fraction of cells to be clustered.
+      if ( scl.cell_scores[si] < singletScoreThres ) continue; // skip the droplet if singlet score threshold is not met.
 
       // compute the distance with each clusters
       std::vector<dropD> dropDs;
@@ -208,6 +241,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 	}
       }
       clusts[si] = maxClust;
+      types[si] = 0;      
       ++ccounts[maxClust];
       sumMaxScore += maxScore;
 
@@ -239,6 +273,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
     hts_close(wc0);
   }
 
+  // create pileups for each cluster
   std::vector< std::map<int32_t,snp_droplet_pileup> > clustPileup(nSamples);
 
   std::vector<bool> snps_observed(scl.nsnps,false);
@@ -333,18 +368,18 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   std::vector<double> sngPPs(scl.nbcs,-1e300);
   std::vector<double> sngOnlyPPs(scl.nbcs,-1e300);
   std::vector<double> sumLLKs(scl.nbcs,-1e300);  
-  std::vector<int32_t> types(scl.nbcs,-1);
       
   // calculate probabilities of singlets/doublets
   int32_t max_iter = 10;  
   for(int32_t iter=0; iter < max_iter; ++iter) {
     notice("Inferring doublets and refining clusters.., iter = %d", iter+1);
-    
+
     double gp1s[3], gp2s[3], gp0s[3], sum1, sum2;
     int32_t npairs = nSamples*(nSamples+1)/2;
     double log_single_prior = log((1.0-doublet_prior)/nSamples);
     double log_double_prior = log(doublet_prior/nSamples/(nSamples-1)*2.0);
 
+    // iterate each barcode, and identify the best matching cluster
     for(int32_t i=0; i < scl.nbcs; ++i) {
       std::vector<double> llks(npairs, 0);
       std::map<int32_t,snp_droplet_pileup*>::iterator it;
@@ -356,11 +391,18 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 	std::vector<double> lks(npairs, 0);
 	double lk;
 	double* glis = it->second->gls;	
-	for(int32_t j=0; j < nSamples; ++j) {
+	for(int32_t j=0; j < nSamples; ++j) {  // compare with each possible cluster
 	  snp_droplet_pileup& sdp1 = clustPileup[j][it->first];
-	  gp1s[0] = (1.0-af)*(1.0-af)*sdp1.gls[0];
-	  gp1s[1] = 2*af*(1.0-af)*sdp1.gls[4];
-	  gp1s[2] = af*af*sdp1.gls[8];
+	  //if ( ( types[i] == 0 ) && ( clusts[i] == j ) ) { // leave one droplet out
+	  //  gp1s[0] = (1.0-af)*(1.0-af)*sdp1.gls[0]/(glis[0] > 1e-100 ? glis[0] : 1e-100);
+	  //  gp1s[1] = 2*af*(1.0-af)*sdp1.gls[4]/(glis[4] > 1e-100 ? glis[4] : 1e-100);
+	  //  gp1s[2] = af*af*sdp1.gls[8]/(glis[8] > 1e-100 ? glis[8] : 1e-100);
+	  //}
+	  //else {
+	    gp1s[0] = (1.0-af)*(1.0-af)*sdp1.gls[0];
+	    gp1s[1] = 2*af*(1.0-af)*sdp1.gls[4];
+	    gp1s[2] = af*af*sdp1.gls[8];	    
+	  //}
 	  sum1 = gp1s[0]+gp1s[1]+gp1s[2];
 	  gp1s[0] /= sum1;
 	  gp1s[1] /= sum1;
@@ -369,14 +411,21 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 	  //if ( ( geno_error > 0 ) && ( iter + 1 == max_iter ) ) {	    
 	    gp1s[0] = (1-geno_error)*gp1s[0] + geno_error*gp0s[0];
 	    gp1s[1] = (1-geno_error)*gp1s[1] + geno_error*gp0s[1];
-	    gp1s[2] = (1-geno_error)*gp1s[2] + geno_error*gp0s[2];	    
+	    gp1s[2] = (1-geno_error)*gp1s[2] + geno_error*gp0s[2]; // gp1s represents original
 	  }
-	  for(int32_t k=0; k < j; ++k) {
+	  for(int32_t k=0; k < j; ++k) {  // look at pairs of clusters
 	    snp_droplet_pileup& sdp2 = clustPileup[k][it->first];	  
 	    // Pr(D|g1,g2)Pr(g1|C1)Pr(g2|C2)Pr(C1)Pr(C2)
-	    gp2s[0] = (1.0-af)*(1.0-af)*sdp2.gls[0];
-	    gp2s[1] = 2*af*(1.0-af)*sdp2.gls[4];
-	    gp2s[2] = af*af*sdp2.gls[8];
+	    //if ( ( types[i] == 0 ) && ( clusts[i] == k ) ) { // leave one droplet out
+	    //  gp1s[0] = (1.0-af)*(1.0-af)*sdp2.gls[0]/(glis[0] > 1e-100 ? glis[0] : 1e-100);
+	    //  gp1s[1] = 2*af*(1.0-af)*sdp2.gls[4]/(glis[4] > 1e-100 ? glis[4] : 1e-100);
+	    //  gp1s[2] = af*af*sdp2.gls[8]/(glis[8] > 1e-100 ? glis[8] : 1e-100);
+	    //}
+	    //else {
+	      gp2s[0] = (1.0-af)*(1.0-af)*sdp2.gls[0];
+	      gp2s[1] = 2*af*(1.0-af)*sdp2.gls[4];
+	      gp2s[2] = af*af*sdp2.gls[8];
+	    //}
 	    sum2 = gp2s[0]+gp2s[1]+gp2s[2];
 	    gp2s[0] /= sum2;
 	    gp2s[1] /= sum2;
@@ -468,6 +517,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
     clustPileup.resize(nSamples);
     int32_t nsingle = 0, namb = 0, nchanged = 0;
     for(int32_t i=0; i < scl.nbcs; ++i) {
+      clusts[i] = -1;
       if ( dblBestLLKs[i] > sngBestLLKs[i] + 2 ) { // best call is doublet
 	// consider as changed only when the assignment category was changed.
 	if ( types[i] != 1 ) ++nchanged;
@@ -499,6 +549,8 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
 	bestPPs[i] = ( sngBestLLKs[i] + log_single_prior - sumLLKs[i] );
 	jBests[i] = kBests[i] = sBests[i];
 	bestLLKs[i] = sngBestLLKs[i];
+
+	clusts[i] = jBests[i];	
 
 	if ( dblBestLLKs[i] > sngNextLLKs[i] + 2 ) { // next best is doublet
 	  jNexts[i] = dBest1s[i];

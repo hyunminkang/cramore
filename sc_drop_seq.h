@@ -129,6 +129,18 @@ struct snp_droplet_pileup {
 
 class sc_dropseq_lib_t {
  public:
+  // information to filter the input barcodes
+  int32_t nbcs;
+  int32_t nsnps;  
+  int32_t minUMI;
+  int32_t minSNP;
+  int32_t minRead;
+  int32_t minBQ;
+  int32_t capBQ;
+  
+  std::set<std::string> valid_bcs;
+  std::vector<int32_t>  index_bcs;
+  
   // vector containing SNP & genotype info, index is snp_id
   std::map<std::string, int32_t> chr2rid;
   std::vector<std::string>       rid2chr;
@@ -149,18 +161,16 @@ class sc_dropseq_lib_t {
   std::vector<double>  cell_scores;
   
   std::vector< std::map<int32_t,sc_snp_droplet_t*> > snp_umis;
-  int32_t nbcs;
-  int32_t nsnps;
   int32_t add_snp(int32_t _rid, int32_t _pos, char _ref, char _alt, double _af, double* _gps);
   int32_t add_cell(const char* barcode);
   bool add_read(int32_t snpid, int32_t cellid, const char* umi, char allele, char qual);
 
+  int32_t load_valid_barcodes(const char* bcdFile);
   int32_t load_from_plp(const char* plpPrefix, BCFFilteredReader* pvr = NULL, const char* field = "GP", double genoErrorOffset = 0.1, double genoErrorCoeffR2 = 0.0, const char* r2info = "R2", bool loadUMI = false);
 
-  sc_dropseq_lib_t() : nbcs(0), nsnps(0) {}
+  sc_dropseq_lib_t() : nbcs(0), nsnps(0), minUMI(0), minSNP(0), minRead(0), minBQ(1), capBQ(60) {}
 
   dropD calculate_droplet_clust_distance(std::map<int32_t,snp_droplet_pileup*> dropletPileup, std::map<int32_t,snp_droplet_pileup>& clustPileup);
-  
 };
 
 double calculate_snp_droplet_GL(sc_snp_droplet_t* ssd, double* gls);

@@ -32,6 +32,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv);
 int32_t cmdCramMuxPileup(int32_t argc, char** argv);
 int32_t cmdCramDigitalPileup(int32_t argc, char** argv);
 int32_t cmdCramDscPileup(int32_t argc, char** argv);
+int32_t cmdCramDscDump(int32_t argc, char** argv);
 int32_t cmdCramSimuxlet(int32_t argc, char** argv);
 int32_t cmdCramSparseGenotype(int32_t argc, char** argv);
 int32_t cmdCramDenseGenotype(int32_t argc, char** argv);
@@ -41,6 +42,7 @@ int32_t cmdCramCompareBQs(int32_t argc, char** argv);
 int32_t cmdCramContextIndelAnalysis(int32_t argc, char** argv);
 
 int32_t cmdDgeBarcodeSummary(int32_t argc, char** argv);
+int32_t cmdDgeShuffle(int32_t argc, char** argv);
 int32_t cmdScMultinomEM(int32_t argc, char** argv);
 int32_t cmdScMultinomGibbs(int32_t argc, char** argv);
 int32_t cmdScMapSTAMPs(int32_t argc, char** argv);
@@ -122,14 +124,16 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("freemux2", &cmdCramFreemux2, "Rapid genotype-free deconvolution of sc-RNAseq")    
     LONG_COMMAND("mux-pileup", &cmdCramMuxPileup, "Produce pileup of dsc-RNAseq")
     LONG_COMMAND("digital-pileup", &cmdCramDigitalPileup, "Produce pileup of dsc-RNAseq")
-    LONG_COMMAND("dsc-pileup", &cmdCramDscPileup, "Produce pileup of dsc-RNAseq")        
+    LONG_COMMAND("dsc-pileup", &cmdCramDscPileup, "Produce pileup of dsc-RNAseq")
+    LONG_COMMAND("dsc-dump", &cmdCramDscDump, "Produce a dump of dsc-RNAseq")      
     LONG_COMMAND("simuxlet",   &cmdCramSimuxlet,  "Simulate multiplexed dsc-RNAseq droplets")
     LONG_COMMAND("kallisto-count", &cmdScKallistoCount, "Produce digital expression matrix from kallisto-aligned sequence reads")
     LONG_COMMAND("sc-map-stamps", &cmdScMapSTAMPs, "Produce STAMP-map from DropSeq FASTQ files")
     LONG_COMMAND("sc-multinom-em", &cmdScMultinomEM, "Multinomial EM clustering of single cell types")
     LONG_COMMAND("sc-multinom-gibbs", &cmdScMultinomGibbs, "Multinomial Gibbs sampling of single cell types")
     LONG_COMMAND("plp-find-mux-clust", &cmdPlpFindMuxClust, "(Experimental) Perform tSNE clustering on mux-seq data")
-    LONG_COMMAND("dge-barcode-summary", &cmdDgeBarcodeSummary, "Summarize digital expression matrix")    
+    LONG_COMMAND("dge-barcode-summary", &cmdDgeBarcodeSummary, "Summarize digital expression matrix")
+    LONG_COMMAND("dge-shuffle", &cmdDgeShuffle, "Shuffle digital expression matrix")        
 
     LONG_COMMAND_GROUP("Other tools", NULL)
     LONG_COMMAND("bed-matched-shuffle",&cmdBedMatchedShuffle, "Shuffle BED regions adjusting for GC contents and repeats")

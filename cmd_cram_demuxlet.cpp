@@ -14,7 +14,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   std::string plpPrefix;
   std::string tagGroup("CB");
   std::string tagUMI("UB");
-  int32_t capBQ = 40;
+  int32_t capBQ = 20;
   int32_t minBQ = 13;
   int32_t minTD = 0;
   sr.filt.exclude_flag = 0x0f04;
@@ -32,7 +32,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
   double doublet_prior = 0.5;
   std::string groupList;
   int32_t minTotalReads = 0;
-  int32_t minUniqReads = 0;
+  int32_t minUMIs = 0;
   int32_t minCoveredSNPs = 0;
 
   paramList pl;
@@ -74,7 +74,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     LONG_PARAM_GROUP("Cell/droplet filtering options", NULL)
     LONG_STRING_PARAM("group-list",&groupList, "List of tag readgroup/cell barcode to consider in this run. All other barcodes will be ignored. This is useful for parallelized run")    
     LONG_INT_PARAM("min-total", &minTotalReads, "Minimum number of total reads for a droplet/cell to be considered")
-    LONG_INT_PARAM("min-uniq", &minUniqReads, "Minimum number of unique reads (determined by UMI/SNP pair) for a droplet/cell to be considered")
+    LONG_INT_PARAM("min-umi",   &minUMIs, "Minimum number of UMIs for a droplet/cell to be considered")    
     LONG_INT_PARAM("min-snp", &minCoveredSNPs, "Minimum number of SNPs with coverage for a droplet/cell to be considered")
   END_LONG_PARAMS();
 
@@ -108,6 +108,16 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     if ( !sr.sam_file_name.empty() ) {      
       error("with --plp option, neither --sam option cannot be used");
     }
+
+    scl.minRead = minTotalReads;
+    scl.minUMI  = minUMIs;
+    scl.minSNP  = minCoveredSNPs;
+    scl.capBQ   = capBQ;
+    scl.minBQ   = minBQ;
+
+    if ( !groupList.empty() ) {
+      scl.load_valid_barcodes(groupList.c_str());
+    }    
 
     scl.load_from_plp(plpPrefix.c_str(), &vr, field.c_str(), genoErrorOffset, genoErrorCoeffR2, r2Info.c_str());
   }
@@ -394,9 +404,9 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
     
     notice("Starting to prune out cells with too few reads...");
     int32_t nRemoved = 0;
-    if ( minTotalReads + minUniqReads + minCoveredSNPs < 0 ) {
+    if ( minTotalReads + minUMIs + minCoveredSNPs < 0 ) {
       for(int32_t i=0; i < scl.nbcs; ++i) {
-	if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUniqReads) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) {
+	if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUMIs) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) {
 	  for(std::map<int32_t,sc_snp_droplet_t*>::iterator it = scl.cell_umis[i].begin();
 	      it != scl.cell_umis[i].end(); ++it) {
 	    delete it->second;
@@ -628,7 +638,7 @@ int32_t cmdCramDemuxlet(int32_t argc, char** argv) {
       notice("Demultiplexing %d droplets..", ncells);
     
     i = it0->second;
-    if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUniqReads) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) continue;
+    if ( ( scl.cell_totl_reads[i] < minTotalReads ) || ( scl.cell_uniq_reads[i] < minUMIs) || ( (int32_t)scl.cell_umis[i].size() < minCoveredSNPs ) ) continue;
 
     memset(llksAB,0,sizeof(double)*n1*nv*nAlpha); // pairwise doublet/singlet likelihood
     memset(llksA0,0,sizeof(double)*nv*nAlpha);    // half-unspecified double likelihood
