@@ -344,7 +344,7 @@ void JointGenotypeBlockReader::write_header(BCFOrderedWriter* odw, bool printTmp
   bcf_hdr_append(odw->hdr, "##INFO=<ID=HWE_SLP_I,Number=1,Type=Float,Description=\"Signed log p-values testing statistics based Hardy Weinberg Equilibrium Test adjusting for population substructure\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=MAX_IF,Number=1,Type=Float,Description=\"Maximum individual-specific allele frequencies\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=MIN_IF,Number=1,Type=Float,Description=\"Minimum individual-specific allele frequencies\">\n");
-  bcf_hdr_append(odw->hdr, "##INFO=<ID=BETA_IF,Number=%d,Type=Float,Description=\"Coefficients for intercept and each eigenvector to obtain ISAF\">\n");
+  bcf_hdr_append(odw->hdr, "##INFO=<ID=BETA_IF,Number=.,Type=Float,Description=\"Coefficients for intercept and each eigenvector to obtain ISAF\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=ABE,Number=1,Type=Float,Description=\"Expected allele Balance towards Reference Allele on Heterozygous Sites\">\n");
   bcf_hdr_append(odw->hdr, "##INFO=<ID=ABZ,Number=1,Type=Float,Description=\"Average Z-scores of Allele Balance towards Reference Allele on Heterozygous Sites\">\n");	
   bcf_hdr_append(odw->hdr, "##INFO=<ID=NS_NREF,Number=1,Type=Integer,Description=\"Number of samples with non-reference reads\">\n");
