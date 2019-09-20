@@ -177,8 +177,6 @@ add_executable(cramore
 	sex_ploidy_map.h
 	Sort.cpp
 	Sort.h
-	sptree.cpp
-	sptree.h
 	tabix.h
 	tsv_reader.cpp
 	tsv_reader.h
