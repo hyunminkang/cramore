@@ -42,5 +42,11 @@ autom4te.cache/*
 test/
 test/*
 
+.idea
+cmake-build-debug/
+build
+htslib
+bin
+
 .DS_Store
 cramore

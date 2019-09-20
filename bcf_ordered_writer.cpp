@@ -109,7 +109,7 @@ void BCFOrderedWriter::link_hdr(bcf_hdr_t *hdr)
  */
 void BCFOrderedWriter::write_hdr()
 {
-    bcf_hdr_write(file, hdr);
+  bcf_hdr_write(file, hdr);
 }
 
 /**
@@ -164,7 +164,7 @@ void BCFOrderedWriter::write(bcf1_t *v)
     }
     else
     {
-        bcf_write(file, hdr, v);
+      bcf_write(file, hdr, v);
     }
 }
 
