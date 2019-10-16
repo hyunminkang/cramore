@@ -524,3 +524,5 @@ if(NOT CRYPTOLIB)
 endif()
 
 target_link_libraries(cramore ${HTS_LIBRARIES} ${ZLIB} ${BZIP2} ${LZMA} ${CURLLIB} ${CRYPTOLIB})
+
+install(TARGETS cramore RUNTIME DESTINATION bin)
