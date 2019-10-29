@@ -314,7 +314,7 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
     std::string bam_sm_name = bam_hdr_get_sample_name(h);
 
     if ( sample_names[i].compare(bam_sm_name) != 0 )
-      warning("The same name %s is different from the same name %s from %s. Continuing with the former one", sample_names[i].c_str(), bam_sm_name.c_str(), cram_paths[i].c_str());
+      warning("The expected sample name '%s' is different from the observed sample name '%s' from the CRAM file '%s'. Continuing with the former one", sample_names[i].c_str(), bam_sm_name.c_str(), cram_paths[i].c_str());
 
     jgbr.set_sample(i, sample_names[i].c_str(), contams[i], evecs[i]);
 

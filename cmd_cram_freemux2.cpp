@@ -17,7 +17,7 @@ int32_t cmdCramFreemux2(int32_t argc, char** argv) {
   int32_t minBQ = 13;
   //std::vector<double> gridAlpha;
   double doublet_prior = 0.5;
-  double geno_error = 0.0;
+  double geno_error = 0.1;
   std::string groupList;
   int32_t minTotalReads = 0;
   int32_t minUMIs = 0;
