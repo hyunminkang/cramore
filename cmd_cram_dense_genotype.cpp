@@ -296,7 +296,7 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
   */
 
   // load the VCF file first
-  notice("Loading input VCF file %s in region %s", inVcf.c_str(), intervals[0].to_string().c_str());
+  notice("Loading input VCF file %s in region %s", inVcf.c_str(), intervals.size() ? intervals[0].to_string().c_str() : "*");
   JointGenotypeBlockReader jgbr(inVcf, intervals, output_tmp_prefix, nsamples, unit, printTmpInfo);
 
   BCFOrderedWriter* odw = new BCFOrderedWriter(out);
@@ -307,6 +307,12 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
 
   for(int32_t i=0; i < nsamples; ++i) {
     BAMOrderedReader odr(cram_paths[i], intervals);
+    
+    if (intervals.size() && !odr.index_loaded) {
+      fprintf(stderr, "[%s:%d %s] Cannot open index for %s\n", __FILE__, __LINE__, __FUNCTION__, cram_paths[i].c_str());
+      exit(1);
+    }
+
     bam_hdr_t* h = odr.hdr;
     int64_t no_reads = 0;
     int64_t no_filt_reads = 0;

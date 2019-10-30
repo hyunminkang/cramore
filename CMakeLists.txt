@@ -13,6 +13,8 @@ endif()
 
 message(STATUS ${HTS_INCLUDE_DIRS})
 
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;${CMAKE_FIND_LIBRARY_SUFFIXES}")
+
 find_library(HTS_LIBRARIES hts HINTS /usr/lib/x86_64-linux-gnu/ /usr/lib/ /usr/lib64/)
 if(NOT HTS_LIBRARIES)
     message(FATAL_ERROR "libhts HTS_LIBRARIES not found")
