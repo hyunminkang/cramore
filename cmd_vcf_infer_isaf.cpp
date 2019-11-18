@@ -25,7 +25,7 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
   bool lrtEM    = false;  
   std::string field;
   double gtError = 0.005;
-  double maxLambda = 1.0;
+  double maxLambda = 0.0; //1.0;
 
   bfr.vfilt.maxAlleles = 2;
   bfr.verbose = 100;

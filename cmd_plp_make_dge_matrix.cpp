@@ -312,7 +312,8 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     int32_t igene = mapElems[e->type][e] + 1;
     htsFile* hf = mtxFiles[e->type];
     for(std::map<int32_t,int32_t>::iterator jt = it->second.begin(); jt != it->second.end(); ++jt) {
-      hprintf(hf, "%d %d %d\n", igene, jt->first + 1, jt->second);
+      if ( jt->second > 0 )
+	hprintf(hf, "%d %d %d\n", igene, jt->first + 1, jt->second);
     }
     ++nelems;
   }

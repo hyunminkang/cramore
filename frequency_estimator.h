@@ -52,8 +52,8 @@ class frequency_estimator : public VectorFunc {
   double pooled_af;
   bool isaf_computed;
 
-  frequency_estimator(Eigen::MatrixXd* _pEigVecs, double _tol = 1e-10, double maxLambda = 1.0);
-  frequency_estimator(Eigen::BDCSVD<Eigen::MatrixXd>* pSVD, double _tol = 1e-10, double maxLambda = 1.0);  
+  frequency_estimator(Eigen::MatrixXd* _pEigVecs, double _tol = 1e-10, double maxLambda = 0.0); // changed
+  frequency_estimator(Eigen::BDCSVD<Eigen::MatrixXd>* pSVD, double _tol = 1e-10, double maxLambda = 0.0); // changed  
   ~frequency_estimator();
 
   bool set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr);

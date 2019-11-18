@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.4)
 project(cramore)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -O3 -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -O3")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 
@@ -13,7 +13,7 @@ endif()
 
 message(STATUS ${HTS_INCLUDE_DIRS})
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;${CMAKE_FIND_LIBRARY_SUFFIXES}")
+#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;${CMAKE_FIND_LIBRARY_SUFFIXES}")
 
 find_library(HTS_LIBRARIES hts HINTS /usr/lib/x86_64-linux-gnu/ /usr/lib/ /usr/lib64/)
 if(NOT HTS_LIBRARIES)
@@ -526,7 +526,9 @@ if(NOT CRYPTOLIB)
 endif()
 
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 target_link_libraries(cramore ${HTS_LIBRARIES} ${ZLIB} ${BZIP2} ${LZMA} ${CURLLIB} ${CRYPTOLIB} ${CMAKE_THREAD_LIBS_INIT})
+
 
 install(TARGETS cramore RUNTIME DESTINATION bin)
