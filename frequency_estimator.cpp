@@ -1,7 +1,9 @@
 #include "frequency_estimator.h"
 
+#define MIN_AF_HARD_THRES 1e-5
+
 frequency_estimator::frequency_estimator(Eigen::MatrixXd* _pEigVecs, double _tol, double _maxLambda) :
-  skipIf(false), skipInfo(false), siteOnly(false), nelderMead(false), assumeHWD(false), gtError(0.005) 
+  skipIf(false), skipInfo(false), siteOnly(false), assumeHWD(false), gtError(0.005) 
 {
   if ( _pEigVecs == NULL )
     error("[E:%s:%d %s] Invalid eigenvectors", __FILE__, __LINE__, __PRETTY_FUNCTION__ );
@@ -21,9 +23,10 @@ frequency_estimator::frequency_estimator(Eigen::MatrixXd* _pEigVecs, double _tol
 
   pls = NULL; n_pls = 0; ploidies = NULL;
   ifs = new float[nsamples];
-  betas = new float[ndims];
+  betas = new float[ndims+1];
   theta = 0;
   pooled_af = -1;
+  pooled_flip = false;
   isaf_computed = false;
 
   gt = NULL;
@@ -59,9 +62,10 @@ frequency_estimator::frequency_estimator(Eigen::BDCSVD<Eigen::MatrixXd>* _pSVD, 
 
   pls = NULL; n_pls = 0; ploidies = NULL;
   ifs = new float[nsamples];
-  betas = new float[ndims];
+  betas = new float[ndims+1];
   theta = 0;
   pooled_af = -1;
+  pooled_flip = false;
   isaf_computed = false;  
 }
 
@@ -95,8 +99,12 @@ bool frequency_estimator::set_hdr(bcf_hdr_t* _hdr, bcf_hdr_t* _wdr ) {
 	sprintf(buffer,"##INFO=<ID=MIN_IF,Number=1,Type=Float,Description=\"Minimum Individual-specific allele frequency\">\n");
 	bcf_hdr_append(wdr, buffer);
       }
+      if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "MEAN_IF" ) < 0 ) {
+	sprintf(buffer,"##INFO=<ID=AVG_IF,Number=1,Type=Float,Description=\"Sample Mean of Individual-specific allele frequency\">\n");
+	bcf_hdr_append(wdr, buffer);
+      }            
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "BETA_IF" ) < 0 ) {      
-	sprintf(buffer,"##INFO=<ID=BETA_IF,Number=%d,Type=Float,Description=\"Coefficients for intercept and each eigenvector to obtain ISAF\">\n", ndims);
+	sprintf(buffer,"##INFO=<ID=BETA_IF,Number=%d,Type=Float,Description=\"Coefficients for intercept and each eigenvector to obtain ISAF, with flag of AF flipping at the end\">\n", ndims+1);
 	bcf_hdr_append(wdr, buffer);
       }      
       if ( bcf_hdr_id2int(_hdr, BCF_DT_ID, "LLK0" ) < 0 ) {      
@@ -232,6 +240,7 @@ bool frequency_estimator::set_variant(bcf1_t* _iv, int8_t* _ploidies, int32_t* _
   }
   */
   pooled_af = -1;
+  pooled_flip = false;
   isaf_computed = false;
   
   return true;
@@ -266,8 +275,13 @@ double frequency_estimator::estimate_pooled_af_em(int32_t maxiter) {
       q = 1.0-p;
     }
     pooled_af = p;
-    if ( pooled_af * nsamples < 0.5 ) { pooled_af = 0.5 / ( 1 + 2 *nsamples ); }
-    else if ( (1-pooled_af)*nsamples < 0.5 ) { pooled_af = 1 - 0.5/(1 + 2*nsamples); }
+    double minAF = 0.5/(nsamples+nsamples+1.);
+    if ( minAF < MIN_AF_HARD_THRES ) minAF = MIN_AF_HARD_THRES;
+    if ( pooled_af < minAF ) pooled_af = minAF;
+    else if ( 1.0 - pooled_af < minAF ) pooled_af = 1.0 - minAF;
+    //if ( pooled_af * nsamples < 0.5 ) { pooled_af = 0.5 / ( 1 + 2 *nsamples ); }
+    //else if ( (1-pooled_af)*nsamples < 0.5 ) { pooled_af = 1 - 0.5/(1 + 2*nsamples); }
+    pooled_flip = pooled_af > 0.5;
   }
   return pooled_af;
 }
@@ -289,6 +303,13 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
 
   assumeHWD = false;
 
+  if ( use_isaf ) {
+    if ( nelderMead )
+      estimate_isaf_simplex();
+    else
+      estimate_isaf_em();
+  }
+
   for(int32_t i=0; i < nsamples; ++i) {
     if ( ploidies[i] != 2 ) continue;
     ++ndiploids;
@@ -304,11 +325,10 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
     sqU0 += (U0*U0);
     
     if ( use_isaf ) {
-      if ( nelderMead )
-	estimate_isaf_simplex();
-      else
-	estimate_isaf_em();
-
+      //if ( nelderMead )
+      //  estimate_isaf_simplex();
+      //else
+      //  estimate_isaf_em();
       sum1 = l0*(1.-ifs[i])*(1.-ifs[i]) + 2*l1*(1.-ifs[i])*ifs[i] + l2*ifs[i]*ifs[i] + 1e-100;
       ph1 = 2*l1*(1.-ifs[i])*ifs[i];
       obsH1 += (ph1/sum1);
@@ -328,11 +348,17 @@ bool frequency_estimator::score_test_hwe(bool use_isaf) {
   }
 
   // temporary: calculate llk_null
-  Vector v(ndims+1);
-  v[0] = pooled_af * 2.0;
+  Vector v(ndims);
+  //v[0] = pooled_flip ? (1.0-pooled_af)*2.0 : pooled_af*2.0;
   for(int32_t j=0; j < ndims; ++j)
-    v[j+1] = betas[j];
+    v[j] = betas[j];
   llknull = 0 - Evaluate(v);
+ 
+  //Vector v(ndims+1);
+  //v[0] = pooled_af * 2.0;
+  //for(int32_t j=0; j < ndims; ++j)
+  //  v[j+1] = betas[j];
+  //llknull = 0 - Evaluate(v);
 
   return true;
 }
@@ -380,24 +406,46 @@ bool frequency_estimator::lr_test_hwe(bool use_isaf) {
 */
 
 
+// NOTE : beta is AF scale not a dosage scale
 double frequency_estimator::Evaluate(Vector& v) {
   double llk = 0;
-  if ( ndims+1+(assumeHWD ? 1 : 0) != v.dim )
-    error("[E:%s:%d %s] Dimensions do not match %d vs %d", __FILE__, __LINE__, __PRETTY_FUNCTION__, ndims+1+(assumeHWD ? 1 : 0), v.dim);
+  //if ( ndims+1+(assumeHWD ? 1 : 0) != v.dim )
+  //  error("[E:%s:%d %s] Dimensions do not match %d vs %d", __FILE__, __LINE__, __PRETTY_FUNCTION__, ndims+1+(assumeHWD ? 1 : 0), v.dim);
+  if ( ndims+(assumeHWD ? 1 : 0) != v.dim )
+    error("[E:%s:%d %s] Dimensions do not match %d vs %d", __FILE__, __LINE__, __PRETTY_FUNCTION__, ndims+(assumeHWD ? 1 : 0), v.dim);
 
-  double expGeno, isaf, isafQ, isafRR, isafRA, isafAA, offset, h;
+  
+  double expAF, isaf, isafQ, isafRR, isafRA, isafAA, offset, h;
 
-  if ( assumeHWD ) h = tanh(v[ndims+1]);
+  //if ( assumeHWD ) h = tanh(v[ndims+1]);
+  if ( assumeHWD ) h = tanh(v[ndims]);  
   else h = 0;
 
+  double minAF = 0.5/(nsamples+nsamples+1.);
+  if ( minAF < MIN_AF_HARD_THRES ) minAF = MIN_AF_HARD_THRES;
+  double minGF = minAF * minAF;
+
   for(int32_t i=0; i < nsamples; ++i) {
-    expGeno = v[0];
+    //expGeno = v[0];
+    //for(int32_t j=0; j < ndims; ++j)
+    //  expGeno += (pEigVecs->operator()(i,j) * v[j+1]);
+
+    expAF = 0;
     for(int32_t j=0; j < ndims; ++j)
-      expGeno += (pEigVecs->operator()(i,j) * v[j+1]);
-      
-    isaf = expGeno/2.0;
-    if ( isaf*(nsamples+nsamples+1) < 0.5 ) isaf = 0.5/(nsamples+nsamples+1);
-    if ( (1.0-isaf)*(nsamples+nsamples+1) < 0.5 ) isaf = 1.0-0.5/(nsamples+nsamples+1);
+      expAF += (pEigVecs->operator()(i,j) * v[j]);
+    
+    // isaf = expGeno/2.0;
+    //isaf = pooled_flip ? ( 1.0 - expGeno/2.0 ) : (expGeno / 2.0);
+    isaf = pooled_flip ? ( 1.0 - expAF ) : expAF;    
+    if ( isaf < minAF ) isaf = minAF;
+    else if ( 1.0-isaf < minAF ) isaf = 1.0-minAF;
+    //if ( isaf*(nsamples+nsamples+1) < 0.5 ) isaf = 0.5/(nsamples+nsamples+1);
+    //if ( (1.0-isaf)*(nsamples+nsamples+1) < 0.5 ) isaf = 1.0-0.5/(nsamples+nsamples+1);
+
+    // limit isaf to specific precision
+    //if ( isaf < MIN_AF_HARD_THRES ) isaf = MIN_AF_HARD_THRES;
+    //else if ( 1.0-isaf < MIN_AF_HARD_THRES ) isaf = 1.0 - MIN_AF_HARD_THRES;
+    
     isafQ = 1.0-isaf;
 
     if ( assumeHWD ) {
@@ -406,14 +454,16 @@ double frequency_estimator::Evaluate(Vector& v) {
       isafRA = 2 * (1.0-h) * isaf * isafQ;
       isafAA = isaf * isaf + offset;
 
-      if ( isafRR < 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1) ) {
-	isafRR = 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1);
+      //if ( isafRR < 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1) ) {
+      if ( isafRR < minGF ) {
+	isafRR = minGF; // 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1);
 	offset = isafRR - isafQ * isafQ;
 	isafAA = isaf * isaf + offset;
 	isafRA = 2 * isaf * isafQ - 2 * offset;
       }
-      else if ( isafAA < 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1) ) {
-	isafAA = 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1);
+      else if ( isafAA < minGF ) {
+	//else if ( isafAA < 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1) ) {
+	isafAA = minGF; // 0.25/(nsamples+nsamples+1)/(nsamples+nsamples+1);
 	offset = isafAA - isaf * isaf;
 	isafRR = isafQ * isafQ + offset;
 	isafRA = 2 * isaf * isafQ - 2 * offset;	
@@ -425,7 +475,8 @@ double frequency_estimator::Evaluate(Vector& v) {
       isafAA = isaf * isaf;
     }
 
-    ifs[i] = isaf;
+    if ( !isaf_computed )
+      ifs[i] = isaf;
     if ( ploidies[i] == 2 ) {
       llk += log(isafRR    * phredConv.toProb(pls[i*3]) +
 		 isafRA    * phredConv.toProb(pls[i*3+1]) +
@@ -455,21 +506,33 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
     double lambda = maxLambda * (1.-maf) / (maf * nsamples * 2.0);
     double p0, p1, p2;
 
+    double minAF = 0.5/(nsamples+nsamples+1.);
+    if ( minAF < MIN_AF_HARD_THRES ) minAF = MIN_AF_HARD_THRES;    
+
     for(int32_t i=0; i < maxiter; ++i) { // maxiter = 30
       for(int32_t j=0; j < nsamples; ++j) {
 	if ( ploidies[j] == 2 ) {
 	  p0 = ( 1.0 - isaf[j] ) * ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j]);
 	  p1 = 2.0 * isaf[j] * ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j+1]);
 	  p2 = isaf[j] * isaf[j] * phredConv.toProb(pls[3*j+2]);
-	  y[j] = (p1+p2+p2+1e-100)/(p0+p1+p2+1e-100);
+	  if ( pooled_flip )
+	    y[j] = (p1+p0+p0+1e-100)/(p0+p1+p2+1e-100);	    
+	  else
+	    y[j] = (p1+p2+p2+1e-100)/(p0+p1+p2+1e-100);
 	}
 	else if ( ploidies[j] == 1 ) {
 	  p0 = ( 1.0 - isaf[j] ) * phredConv.toProb(pls[3*j]);
 	  p2 = isaf[j] * phredConv.toProb(pls[3*j+2]);
-	  y[j] = (p2+p2+1e-100)/(p0+p2+1e-100);
+	  if ( pooled_flip )
+	    y[j] = (p0+p0+1e-100)/(p0+p2+1e-100);	    
+	  else
+	    y[j] = (p2+p2+1e-100)/(p0+p2+1e-100);
 	}
 	else {
-	  y[j] = isaf[j] * 2;
+	  if ( pooled_flip )
+	    y[j] = (1.0 - isaf[j]) * 2;	    
+	  else
+	    y[j] = isaf[j] * 2;
 	}
       }
       // U diag(d_i^2/(d_i^2+lambda)) U'y
@@ -481,17 +544,33 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
 	  UD2(j,k) *= ( d2[k] * d2[k] / ( d2[k] + lambda ) / ( d2[k] + lambda) );
 	}
       }
-      
+
+      // calculate ISAF
       isaf = UD2 * ( pSVD->matrixU().transpose() * y ) / 2.0;
+      // flip ISAF if needed
+      if ( pooled_flip ) {
+	for(int32_t j=0; j < nsamples; ++j)
+	  isaf[j] = 1.0 - isaf[j];
+      }
+	
       for(int32_t j=0; j < nsamples; ++j) {
-	if ( isaf[j]*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 0.5/(nsamples+nsamples+1.0);
-	else if ( (1.0-isaf[j])*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 1.0-0.5/(nsamples+nsamples+1.0);
+	if ( isaf[j] < minAF ) isaf[j] = minAF;
+	else if ( 1.0-isaf[j] < minAF ) isaf[j] = 1.0-minAF;
+	//if ( isaf[j]*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 0.5/(nsamples+nsamples+1.0);
+	//else if ( (1.0-isaf[j])*(nsamples+nsamples+1) < 0.5 ) isaf[j] = 1.0-0.5/(nsamples+nsamples+1.0);
       }
     }
 
+    double sumisaf = 0;
     for(int32_t j=0; j < nsamples; ++j) {
       ifs[j] = (float)isaf[j];
+      sumisaf += isaf[j];
     }
+    //notice("mean(isaf) = %.9lf\n", sumisaf/nsamples);
+
+    //for(int32_t j=0; j < nsamples; j += 1000) {
+    //  notice("isaf[%d] = %.9lf %.9f", j, isaf[j], ifs[j]);
+    //}
 
     Eigen::VectorXd d2 = pSVD->singularValues();    
     Eigen::MatrixXd VD = pSVD->matrixV();
@@ -503,6 +582,7 @@ void frequency_estimator::estimate_isaf_em(int32_t maxiter) {
     Eigen::VectorXd vBeta = VD * ( pSVD->matrixU().transpose() * y ) / 2.0;
     for(int32_t k=0; k < ndims; ++k)
       betas[k] = (float)vBeta[k];
+    betas[ndims] = pooled_flip ? -1.0 : 1.0;
     
     isaf_computed = true;
   }
@@ -528,6 +608,7 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
     //notice("pooled_af = %lf, maf = %lf", pooled_af, maf);    
 
     double minAF = 0.5/(nsamples+nsamples+1.);
+    if ( minAF < MIN_AF_HARD_THRES ) minAF = MIN_AF_HARD_THRES;
     double minGF = minAF*minAF;
 
     double thetaDouble = 0;
@@ -590,8 +671,14 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
 	  x1D = p1D * l1; 
 	  x2D = p2D * l2;
 
-	  yE[j] = (x1E+x2E+x2E+1e-100)/(x0E+x1E+x2E+1e-100);
-	  yD[j] = (x1D+x2D+x2D+1e-100)/(x0D+x1D+x2D+1e-100);
+	  if ( pooled_flip ) {
+	    yE[j] = (x1E+x0E+x0E+1e-100)/(x0E+x1E+x2E+1e-100);
+	    yD[j] = (x1D+x0D+x0D+1e-100)/(x0D+x1D+x2D+1e-100);	    
+	  }
+	  else {
+	    yE[j] = (x1E+x2E+x2E+1e-100)/(x0E+x1E+x2E+1e-100);
+	    yD[j] = (x1D+x2D+x2D+1e-100)/(x0D+x1D+x2D+1e-100);
+	  }
 
 	  //double w = fabs(l0 + l2 - l1 - l1); // heuristic for now.
 	  
@@ -601,21 +688,40 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
 	else if ( ploidies[j] == 1 ) {
 	  x0E = ( 1.0 - isafE[j] ) * phredConv.toProb(pls[3*j]);
 	  x2E = isafE[j] * phredConv.toProb(pls[3*j+2]);
-	  yE[j] = (x2E+x2E+1e-100)/(x0E+x2E+1e-100);
 	  
 	  x0D = ( 1.0 - isafD[j] ) * phredConv.toProb(pls[3*j]);
 	  x2D = isafD[j] * phredConv.toProb(pls[3*j+2]);
-	  yD[j] = (x2D+x2D+1e-100)/(x0D+x2D+1e-100);	  
+
+	  if ( pooled_flip ) {
+	    yE[j] = (x0E+x0E+1e-100)/(x0E+x2E+1e-100);	  
+	    yD[j] = (x0D+x0D+1e-100)/(x0D+x2D+1e-100);	    
+	  }
+	  else {
+	    yE[j] = (x2E+x2E+1e-100)/(x0E+x2E+1e-100);	  
+	    yD[j] = (x2D+x2D+1e-100)/(x0D+x2D+1e-100);
+	  }
 	}
 	else { // this might be buggy for multi-allelics
-	  yE[j] = isafE[j] * 2.0; // use expectation
-	  yD[j] = isafD[j] * 2.0; // use expectation	  
+	  if ( pooled_flip ) {
+	    yE[j] = (1.0 - isafE[j]) * 2.0; // use expectation
+	    yD[j] = (1.0 - isafD[j]) * 2.0; // use expectation	    
+	  }
+	  else {
+	    yE[j] = isafE[j] * 2.0; // use expectation
+	    yD[j] = isafD[j] * 2.0; // use expectation
+	  }
 	}
       }
       
       // calculate isaf (which already reflects beta)
       isafD = UD2 * ( pSVD->matrixU().transpose() * yD ) / 2.0;
       isafE = UD2 * ( pSVD->matrixU().transpose() * yE ) / 2.0;
+      if ( pooled_flip ) {
+	for(int32_t j=0; j < nsamples; ++j) {
+	  isafD[j] = 1.0 - isafD[j];
+	  isafE[j] = 1.0 - isafE[j];	  
+	}
+      }      
 
       //notice("pooled_af = %lf, maf = %lf, minMAF = %lf", pooled_af, maf, minAF);
          
@@ -639,6 +745,7 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
       betas[k] = (float)vBetaD[k];
       //betasE[k] = (float)vBetaE[k];      
     }
+    betas[ndims] = pooled_flip ? -1.0 : 1.0;    
 
     theta = (float)thetaDouble;
 
@@ -719,21 +826,27 @@ void frequency_estimator::estimate_isaf_em_hwd(int32_t maxiter) {
   //return 0;
 }
 
+
 void frequency_estimator::estimate_isaf_simplex() {
   if ( isaf_computed ) return;
 
   assumeHWD = false;
     
   AmoebaMinimizer isafMinimizer;
-  Vector startingPoint(ndims+1);
+  //Vector startingPoint(ndims+1);
+  Vector startingPoint(ndims);  
   double emaf = estimate_pooled_af_em();
   
   startingPoint.Zero();
-  startingPoint[0] = emaf*2.0;
+  if ( pooled_flip )
+    startingPoint[0] = (1.0-emaf)*2.0;    
+  else
+    startingPoint[0] = emaf*2.0;
 
   isafMinimizer.func = this;
 
-  isafMinimizer.Reset(ndims+1);
+  //isafMinimizer.Reset(ndims+1);
+  isafMinimizer.Reset(ndims);  
   isafMinimizer.point = startingPoint;
   isafMinimizer.Minimize(tol);
   Evaluate(isafMinimizer.point);          
@@ -754,8 +867,10 @@ void frequency_estimator::estimate_isaf_lrt() {
 
   double emaf = estimate_pooled_af_em();    
   double llk0, llk1;
-  std::vector<double> p0(ndims+1);
-  std::vector<double> p1(ndims+1);  
+  //std::vector<double> p0(ndims+1);
+  //std::vector<double> p1(ndims+1);
+  std::vector<double> p0(ndims);
+  std::vector<double> p1(ndims);    
 
   // Find MLE assuming HWE
   {
@@ -765,17 +880,25 @@ void frequency_estimator::estimate_isaf_lrt() {
     Vector startingPoint(ndims+1);
     
     startingPoint.Zero();
-    startingPoint[0] = emaf*2.0;
+    if ( pooled_flip )
+      startingPoint[0] = (1.0-emaf);
+    //startingPoint[0] = (1.0-emaf)*2.0;        
+    else
+      startingPoint[0] = emaf;
+    //startingPoint[0] = emaf*2.0;        
     
     isafMinimizer.func = this;
     
-    isafMinimizer.Reset(ndims+1);
+    //isafMinimizer.Reset(ndims+1);
+    isafMinimizer.Reset(ndims);
     isafMinimizer.point = startingPoint;
     isafMinimizer.Minimize(tol);
     Evaluate(isafMinimizer.point);        
 
-    for(int i=0; i < ndims+1; ++i)
-      p0[i] = isafMinimizer.point[i];
+    //for(int i=0; i < ndims+1; ++i) 
+    //  p0[i] = isafMinimizer.point[i];
+    for(int i=0; i < ndims; ++i) 
+      p0[i] = isafMinimizer.point[i];    
     llknull = llk0 = 0 - isafMinimizer.fmin;
 
     //notice("ndims = %d, p0[0] = %.5lg, p0[1] = %.5lg, p0[2] = %.5lg, p0[3] = %.5lg", ndims, p0[0], p0[1], p0[2], p0[3]);
@@ -785,7 +908,8 @@ void frequency_estimator::estimate_isaf_lrt() {
   {
     assumeHWD = true;
     AmoebaMinimizer isafMinimizer;
-    Vector startingPoint(ndims+2);
+    //Vector startingPoint(ndims+2);
+    Vector startingPoint(ndims+1);    
     
     startingPoint.Zero();
 
@@ -794,20 +918,23 @@ void frequency_estimator::estimate_isaf_lrt() {
     
     isafMinimizer.func = this;
     
-    isafMinimizer.Reset(ndims+2);
+    //isafMinimizer.Reset(ndims+2);
+    isafMinimizer.Reset(ndims+1);   
     isafMinimizer.point = startingPoint;
     isafMinimizer.Minimize(tol);
     Evaluate(isafMinimizer.point);    
 
-    for(int i=0; i < ndims+1; ++i)
+    //for(int i=0; i < ndims+1; ++i)
+    //  p1[i] = isafMinimizer.point[i];
+    for(int i=0; i < ndims; ++i)
       p1[i] = isafMinimizer.point[i];
     
-    theta = tanh(isafMinimizer.point[ndims+1]);
+    //theta = tanh(isafMinimizer.point[ndims+1]);
+    theta = tanh(isafMinimizer.point[ndims]);    
     llk1 = 0 - isafMinimizer.fmin;
 
     //notice("ndims = %d, p1[0] = %.5lg, p1[1] = %.5lg, p1[2] = %.5lg, p1[3] = %.5lg", ndims, p1[0], p1[1], p1[2], p1[3]);    
   }
-
 
   double pp0 = (1.-emaf)*(1.-emaf);
   double pp1 = 2 * emaf * (1-emaf);
@@ -946,11 +1073,17 @@ bool frequency_estimator::update_gt_gq(bool update_gq) {
 bool frequency_estimator::update_variant() {
   float hweslp0 = (float)((hwe0z > 0 ? -1 : 1) * log10( erfc(fabs(hwe0z)/sqrt(2.0)) + 1e-100 ));
   float hweslp1 = (float)((hwe1z > 0 ? -1 : 1) * log10( erfc(fabs(hwe1z)/sqrt(2.0)) + 1e-100 ));
-  float max_if = 0, min_if = 1;
+  float max_if = 0.0, min_if = 1.0, sum_if = 0.0;
   for(int32_t j=0; j < nsamples; ++j) {
     if ( ifs[j] > max_if ) max_if = ifs[j];
     if ( ifs[j] < min_if ) min_if = ifs[j];
+    sum_if += ifs[j];
   }
+  sum_if /= nsamples;
+
+  //for(int32_t j=0; j < nsamples; j += 1000) {
+  //  notice("ifs[%d] = %.9f", j, ifs[j]);
+  //}  
 
   if ( siteOnly ) {
     //notice("foo");
@@ -967,8 +1100,9 @@ bool frequency_estimator::update_variant() {
     bcf_update_info_float(wdr, iv, "HWE_SLP_I", &hweslp1, 1);
     bcf_update_info_float(wdr, iv, "MAX_IF", &max_if, 1);
     bcf_update_info_float(wdr, iv, "MIN_IF", &min_if, 1);
+    bcf_update_info_float(wdr, iv, "AVG_IF", &sum_if, 1);    
     bcf_update_info_float(wdr, iv, "LLK0", &llknull, 1);    
-    bcf_update_info_float(wdr, iv, "BETA_IF", betas, ndims);
+    bcf_update_info_float(wdr, iv, "BETA_IF", betas, ndims+1);
   }
   if ( ( !skipIf ) && ( !siteOnly ) ) {
     bcf_update_format_float(wdr, iv, "IF", ifs, nsamples);

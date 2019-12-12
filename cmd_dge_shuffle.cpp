@@ -97,13 +97,15 @@ int32_t cmdDgeShuffle(int32_t argc, char** argv) {
 
   notice("Reconstructing digital expression matrix..");
   std::map< int32_t, std::map<int32_t, int32_t> > dge;
+  int new_num_nonzeros = 0;
   for(int32_t i=0; i < sum_umis; ++i) {
-    ++dge[ibcds[i]][igenes[i]];
+    if ( ++dge[ibcds[i]][igenes[i]] == 1 )
+      ++new_num_nonzeros;
   }
 
   notice("Writing new digital expression matrix to %s", outf.c_str());  
   htsFile* wf = hts_open(outf.c_str(), "w");
-  hprintf(wf, "%%%%MatrixMarket matrix coordinate integer general\n%%\n%d %d %d\n", n_genes, n_bcds, num_nonzeros);
+  hprintf(wf, "%%%%MatrixMarket matrix coordinate integer general\n%%\n%d %d %d\n", n_genes, n_bcds, new_num_nonzeros);
   for(std::map<int32_t,std::map<int32_t,int32_t> >::iterator it1 = dge.begin(); it1 != dge.end(); ++it1) {
     for(std::map<int32_t,int32_t>::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
       hprintf(wf, "%d %d %d\n", it2->first, it1->first, it2->second);

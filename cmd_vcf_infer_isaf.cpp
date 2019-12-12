@@ -48,8 +48,8 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
     LONG_PARAM("skip-if", &skipIf,   "Skip writing individual-specific allele frequency for each sample in output VCF/BCF")
     LONG_PARAM("skip-info", &skipInfo,   "Skip updating INFO field for each sample in output VCF/BCF")
     LONG_PARAM("site-only", &siteOnly,   "Do not write genotype information, and writes only site information (up to INFO field) in output VCF/BCF")
-    LONG_PARAM("nelder-mead", &nelderMead,   "Use Nelder-Mead algorithm (instead of EM) when estimating individual-specific allele frequencies")
-    LONG_PARAM("lrt-test", &lrtTest,   "Use Likelihood-ratio test with Nelder-Mead algorithm (instead of score test) for performing HWE test")
+    LONG_PARAM("score-simplex", &nelderMead,   "Use Nelder-Mead algorithm (instead of EM) when estimating individual-specific allele frequencies and test HWE with score test")
+    LONG_PARAM("lrt-simplex", &lrtTest,   "Use Likelihood-ratio test with Nelder-Mead algorithm (instead of score test) for performing HWE test")
     LONG_PARAM("lrt-em", &lrtEM,   "Use Likelihood-ratio test with EM algorithm (instead of score test) for performing HWE test")        
 
     LONG_PARAM_GROUP("Samples to focus on",NULL)
@@ -185,8 +185,8 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
     //freqest.estimate_isaf_simplex();
     //freqest.estimate_isaf_em();
     if ( lrtTest )
-      freqest.estimate_isaf_lrt();
-    else if ( lrtEM )
+     freqest.estimate_isaf_lrt();
+    if ( lrtEM )
       freqest.estimate_isaf_em_hwd();      
     else
       freqest.score_test_hwe(true);

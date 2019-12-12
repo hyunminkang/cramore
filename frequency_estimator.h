@@ -50,6 +50,7 @@ class frequency_estimator : public VectorFunc {
   int32_t* gq;
 
   double pooled_af;
+  bool   pooled_flip;
   bool isaf_computed;
 
   frequency_estimator(Eigen::MatrixXd* _pEigVecs, double _tol = 1e-10, double maxLambda = 0.0); // changed
