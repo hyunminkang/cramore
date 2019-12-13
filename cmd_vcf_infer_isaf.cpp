@@ -26,6 +26,7 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
   std::string field;
   double gtError = 0.005;
   double maxLambda = 0.0; //1.0;
+  bool updateGT = false;
 
   bfr.vfilt.maxAlleles = 2;
   bfr.verbose = 100;
@@ -45,6 +46,7 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out",&outVcf, "(REQUIRED) Output VCF file to write with ISHWEZ and ISIBC statistics and IF format field")
+    LONG_PARAM("update-gt", &updateGT,   "Updated Genotypes based on ISAF")    
     LONG_PARAM("skip-if", &skipIf,   "Skip writing individual-specific allele frequency for each sample in output VCF/BCF")
     LONG_PARAM("skip-info", &skipInfo,   "Skip updating INFO field for each sample in output VCF/BCF")
     LONG_PARAM("site-only", &siteOnly,   "Do not write genotype information, and writes only site information (up to INFO field) in output VCF/BCF")
@@ -190,6 +192,8 @@ int32_t cmdVcfInferISAF(int32_t argc, char** argv) {
       freqest.estimate_isaf_em_hwd();      
     else
       freqest.score_test_hwe(true);
+    if ( updateGT )
+      freqest.update_gt_gq(true);      
     freqest.update_variant();
 
     //notice("car %d %d",bcf_hdr_nsamples(odw.hdr),nv->n_sample);    
