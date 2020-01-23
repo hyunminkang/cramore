@@ -135,9 +135,10 @@ int32_t cmdVcfMendelDupConc(int32_t argc, char** argv) {
   hprintf(wf_vf,"\n");
   hprintf(wf_if,"\n");
   hprintf(wf_vd,"\n");
-  hprintf(wf_id,"\n");  
-  
-  for(itF = ped->famIDmap.begin(); itF != ped->famIDmap.end(); ++itF, ++i) {
+  hprintf(wf_id,"\n");
+
+  // for each family, create dup concordance and family concordance objects as needed
+  for(itF = ped->famIDmap.begin(); itF != ped->famIDmap.end(); ++itF) {
     NuclearFamily* pFam = itF->second;
 
     if ( ( pFam->pDad ) && ( pFam->pDad->samples.size() > 1 ) ) 
@@ -176,6 +177,8 @@ int32_t cmdVcfMendelDupConc(int32_t argc, char** argv) {
       continue;
     }
 
+    //notice("%d %s %s",iv->pos+1, iv->d.allele[0], iv->d.allele[1]);
+
     if ( iv->pos % verbose == 0 ) {
       notice("Reporting whenever the position is a multiple of %d - currently processing [%s %d %s %s]",verbose, bcf_hdr_id2name(odr.hdr, iv->rid), iv->pos+1, iv->d.allele[0], iv->d.allele[1]);    
     }
@@ -203,7 +206,7 @@ int32_t cmdVcfMendelDupConc(int32_t argc, char** argv) {
     FamilyConcordance vFam(1);
     DupConcordance vDup(2);
     
-    for(itF = ped->famIDmap.begin(); itF != ped->famIDmap.end(); ++itF, ++i) {
+    for(itF = ped->famIDmap.begin(); itF != ped->famIDmap.end(); ++itF) {
       NuclearFamily* pFam = itF->second;
 
       // calculate genotype concordance
@@ -227,12 +230,16 @@ int32_t cmdVcfMendelDupConc(int32_t argc, char** argv) {
       trioGTs[1] = (nMom > 0 ? momGTs[0] : 0);      
 
       if ( nDad > 1 ) {
+	//notice("dadGTs.size() = %zu", dadGTs.size());      
+	
 	dupConc[pFam->pDad].addGenotype(dadGTs);
 	for( i=1; i < nDad; ++i )
 	  for( k=0; k < i; ++k) 
 	    vDup.addGenotype(dadGTs[k],dadGTs[i]);
       }
       if ( nMom > 1 ) {
+	//notice("momGTs.size() = %zu", momGTs.size());
+	
 	dupConc[pFam->pMom].addGenotype(momGTs);
 	for( i=1; i < nMom; ++i )
 	  for( k=0; k < i; ++k) 
@@ -256,6 +263,7 @@ int32_t cmdVcfMendelDupConc(int32_t argc, char** argv) {
 	
 	for(j=0; j < (int32_t)pFam->pKids.size(); ++j) {
 	  if ( nKids[j] > 1 ) {
+	    //notice("kidGTs[%d].size() = %zu", j, kidGTs[j].size());	    
 	    dupConc[pFam->pKids[j]].addGenotype(kidGTs[j]);
 	    for( i=1; i < nKids[j]; ++i )
 	      for( k=0; k < i; ++k) 

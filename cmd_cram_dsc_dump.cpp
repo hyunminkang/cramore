@@ -11,10 +11,10 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   // input/output files
   SAMFilteredReader sr;
   BCFFilteredReader vr;
-  std::string region;
-  int32_t nchunks = 100;
+  std::string region;         // process only specific regions
+  int32_t nchunks = 100;    // number of cell barcodes to store in a chunk
   uint32_t seed = 0x811c9dc5;
-  std::string outPrefix;
+  std::string outPrefix;      // outPrefix.map, outPrefix.tmp/ will be created
   
   // tags for droplet barcodes and UMI barcodes
   std::string tagGroup("CB");
@@ -22,8 +22,8 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   int32_t capBQ = 40;
   int32_t minBQ = 13;
   int32_t minTD = 0;
-  sr.filt.exclude_flag = 0x0f04;
-  sr.filt.minMQ = 20;
+  sr.filt.exclude_flag = 0x0f04; // read-level filter to exclude reads
+  sr.filt.minMQ = 20;            // filter to cap the mapping quality 
   
   // input options for VCFs (sites)
   std::vector<std::string> smIDs;
@@ -33,12 +33,10 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   vr.verbose = 10000;
   sr.verbose = 1000000;
   // options to filter droplets
-  std::string groupList;
-  int32_t minTotalReads = 0;
-  int32_t minUniqReads = 0;
-  int32_t minCoveredSNPs = 0;
-  bool skipUmiFlag = false;
-  int32_t excludeFlag = 0x0704;
+  std::string groupList;     // (optional) focuses on specific barcodes 
+  bool skipUmiFlag = false;  //  skip writing UMI info. Only stores variant-focused pileups
+  bool skipEmptyGroup = false; // skip reads with no cell barcodes without assiging '.' as barcode
+  bool skipEmptyUMI = false;   // skip reads with no UMI information without assinging random UMI
 
   paramList pl;
 
@@ -48,7 +46,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     LONG_STRING_PARAM("region",&region, "Region to be focused on")    
     LONG_STRING_PARAM("tag-group",&tagGroup, "Tag representing readgroup or cell barcodes, in the case to partition the BAM file into multiple groups. For 10x genomics, use CB")
     LONG_STRING_PARAM("tag-UMI",&tagUMI, "Tag representing UMIs. For 10x genomiucs, use UB")
-    LONG_INT_PARAM("exclude-flag",&excludeFlag, "SAM/BAM flag to exclude")
+    LONG_INT_PARAM("excl-flag", &sr.filt.exclude_flag, "SAM/BAM FLAGs to be excluded")    
 
     LONG_PARAM_GROUP("Options for input VCF/BCF", NULL)
     LONG_STRING_PARAM("vcf",&vr.bcf_file_name, "Input VCF/BCF file, containing the AC and AN field")
@@ -60,20 +58,19 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     LONG_INT_PARAM("sam-verbose",&sr.verbose, "Verbose message frequency for SAM/BAM/CRAM")
     LONG_INT_PARAM("vcf-verbose",&vr.verbose, "Verbose message frequency for VCF/BCF")
     LONG_PARAM("skip-umi", &skipUmiFlag, "Do not generate [prefix].umi.gz file, which stores the regions covered by each barcode/UMI pair")
-    LONG_INT_PARAM("chunks", &nchunks, "Number of chunks to separate the barcodes")
+    LONG_PARAM("skip-empty-group", &skipEmptyGroup, "Skip read that does not have group (e.g. cell barcode) information. By default it assigns barcode '.'")
+    LONG_PARAM("skip-empty-umi", &skipEmptyUMI, "Skip read that does not have UMI (e.g. cell barcode) information. By default it assigns all reads as a single UMI. To consider them all independent reads, you need to set --tag-UMI '' (empty)")
+    LONG_INT_PARAM("chunks", &nchunks, "Number of chunks to store barcodes randomly")
+    LONG_INT_PARAM("seed", &seed, "Seed for random number generator")
 
     LONG_PARAM_GROUP("SNP-overlapping Read filtering Options", NULL)
     LONG_INT_PARAM("cap-BQ", &capBQ, "Maximum base quality (higher BQ will be capped)")
     LONG_INT_PARAM("min-BQ", &minBQ, "Minimum base quality to consider (lower BQ will be skipped)")
     LONG_INT_PARAM("min-MQ", &sr.filt.minMQ, "Minimum mapping quality to consider (lower MQ will be ignored)")
     LONG_INT_PARAM("min-TD", &minTD, "Minimum distance to the tail (lower will be ignored)")
-    LONG_INT_PARAM("excl-flag", &sr.filt.exclude_flag, "SAM/BAM FLAGs to be excluded")
 
     LONG_PARAM_GROUP("Cell/droplet filtering options", NULL)
     LONG_STRING_PARAM("group-list",&groupList, "List of tag readgroup/cell barcode to consider in this run. All other barcodes will be ignored. This is useful for parallelized run")    
-    LONG_INT_PARAM("min-total", &minTotalReads, "Minimum number of total reads for a droplet/cell to be considered")
-    LONG_INT_PARAM("min-uniq", &minUniqReads, "Minimum number of unique reads (determined by UMI/SNP pair) for a droplet/cell to be considered")
-    LONG_INT_PARAM("min-snp", &minCoveredSNPs, "Minimum number of SNPs with coverage for a droplet/cell to be considered")
   END_LONG_PARAMS();
 
   pl.Add(new longParams("Available Options", longParameters));
@@ -103,8 +100,14 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     vr.target_region = region;
   }
 
-  notice("Initializing BCF reader..");
-  vr.init_params();
+  bool bcfEmpty = vr.bcf_file_name.empty();
+  if ( bcfEmpty ) {
+      notice("No VCF input file was specified. Skipping reading..");
+  }
+  else {  
+    notice("Initializing BCF reader..");
+    vr.init_params();
+  }
   notice("Initializing SAM reader..");  
   sr.init_params();
 
@@ -152,7 +155,9 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   char buf[65535];
 
   // create output directory
-  int32_t ret = mkdir(outPrefix.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  std::string outDir = outPrefix + ".tmp";
+  std::string outMap = outPrefix + ".map.gz";
+  int32_t ret = mkdir(outDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   if ( ret < 0 ) {
     if ( errno == EEXIST ) {
       warning("Warning: The directory %s already exists. Some existing files in the directory may be replaced", outPrefix.c_str());
@@ -164,13 +169,14 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   
   // create chunk files
   std::vector<htsFile*> wfs(nchunks);
+  if ( nchunks > 99999 ) error("Cannot use %d (more than 99999) chunks", nchunks);
+  else if ( nchunks < 1 ) error("Cannot use %d (less than 1) chunk", nchunks);
+
+  // open the chunk filess simultaneously
   for(int32_t i=0; i < nchunks; ++i) {
-    sprintf(buf, "%s/chunk.%04d.tsv.gz", outPrefix.c_str(), i);
+    sprintf(buf, "%s/chunk.%05d.tsv.gz", outDir.c_str(), i);
     wfs[i] = hts_open(buf, "wg");
   }
-
-  if ( !vr.read() ) // Should we throw error, or warning?
-    error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, vr.bcf_file_name.c_str());
 
   // check if the chromosome names are in the same order between BCF and SAM, only if region is not empty
   std::map<int32_t,int32_t> rid2tids;
@@ -182,26 +188,46 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   for(int32_t i=0; i < ntids; ++i) {
     const char* chrom = bam_get_chromi(sr.hdr, i);
     tchroms.push_back(chrom);
-    int32_t rid = bcf_hdr_name2id(vr.cdr.hdr, chrom);
-    if ( rid >= 0 ) {
-      if ( prevrid >= rid ) {
-	const char* prevchrom = bcf_hdr_id2name(vr.cdr.hdr, prevrid);
-	if ( region.empty() )
-	  error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files have different ordering of chromosomes. SAM/BAM/CRAM file has %s before %s, but VCF/BCF file has %s after %s", __PRETTY_FUNCTION__, prevchrom, chrom, prevchrom, chrom);
+    if ( !bcfEmpty ) {
+      int32_t rid = bcf_hdr_name2id(vr.cdr.hdr, chrom);
+      if ( rid >= 0 ) {
+	if ( prevrid >= rid ) {
+	  const char* prevchrom = bcf_hdr_id2name(vr.cdr.hdr, prevrid);
+	  if ( region.empty() )
+	    error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files have different ordering of chromosomes. SAM/BAM/CRAM file has %s before %s, but VCF/BCF file has %s after %s", __PRETTY_FUNCTION__, prevchrom, chrom, prevchrom, chrom);
+	}
+	rid2tids[rid] = i;
+	tid2rids[i] = rid;
+	rchroms.resize(rid+1);
+	rchroms[rid] = chrom;
+	prevrid = rid;
       }
-      rid2tids[rid] = i;
-      tid2rids[i] = rid;
-      rchroms.resize(rid+1);
-      rchroms[rid] = chrom;
-      prevrid = rid;
     }
   }
-  
-  //if ( rid2tids.empty() || tid2rids.empty() || ( rid2tids.size() != tid2rids.size() ) ) {
-  if ( rid2tids.empty() || tid2rids.empty() ) {    
-    error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated");
-  }  
 
+
+  if ( !bcfEmpty ) {
+    if ( !vr.read() ) // Should we throw error, or warning?
+      error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, vr.bcf_file_name.c_str());
+  
+    double af = vr.calculate_af(true);
+    bcf1_t* v = vr.cursor();
+    sprintf(buf, "%d:%d:%c:%c", (int32_t)v->rid, (int32_t)v->pos+1, (char)v->d.allele[0][0], (char)v->d.allele[1][0]);
+    std::map<std::string,int32_t>::iterator it = var2idx.find(buf);
+    if ( it == var2idx.end() ) {
+      var_rids.push_back(v->rid);
+      var_poss.push_back(v->pos+1);
+      var_refs.push_back(v->d.allele[0][0]);
+      var_alts.push_back(v->d.allele[1][0]);
+      var_afs.push_back(af);
+      var2idx[buf] = (int32_t)var_rids.size()-1;
+    }
+  }
+    
+  //if ( rid2tids.empty() || tid2rids.empty() || ( rid2tids.size() != tid2rids.size() ) ) {
+  if ( !bcfEmpty && ( rid2tids.empty() || tid2rids.empty() ) ) {    
+    error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated");
+  }
 
   int32_t ibeg = 0;
   char base, qual;
@@ -211,17 +237,17 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 
   int32_t nReadsMultiSNPs = 0, nReadsSkipBCD = 0, nReadsPass = 0, nReadsRedundant = 0, nReadsN = 0, nReadsLQ = 0, nReadsTMP = 0, nReadsFilt = 0;
 
-  std::vector<std::map<std::string, std::pair<genomeLoci,genomeLoci>> > umiLoci;  // fwd/rev pair
+  std::vector<std::map<std::string, std::pair<genomeLoci,genomeLoci> > > umiLoci;  // fwd/rev pair
 
   while( sr.read() ) { // read SAM file, processing each individual read
     bam1_t* b = sr.cursor();    
     int32_t endpos = bam_endpos(b);
     const char* chrom = bam_get_chrom(sr.hdr, b);
-    int32_t tid2rid = bcf_hdr_name2id(vr.cdr.hdr, chrom);
-    bool noBCF = false;
+    int32_t tid2rid = bcfEmpty ? -1 : bcf_hdr_name2id(vr.cdr.hdr, chrom);
+    bool noBCF = bcfEmpty;
 
     int32_t bamFlag = bam_get_flag(b);
-    if ( bamFlag & excludeFlag )  {
+    if ( bamFlag & sr.filt.exclude_flag )  {
       ++nReadsFilt;
       continue;
     }
@@ -230,18 +256,17 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     if ( tid2rid < 0 ) { // no matching BCF entry in the chromosome, skip;
       noBCF = true;
     }
-
-    int32_t n_cleared = vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );
+    
+    int32_t n_cleared = noBCF ? 0 : vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );
     ibeg += n_cleared;
-      
+    
     // add new snps
     if ( !noBCF ) {
       while( ( !vr.eof ) && ( ( vr.cursor()->rid < tid2rid ) || ( ( vr.cursor()->rid == tid2rid ) && ( vr.cursor()->pos < endpos ) ) ) ) {
 	if ( vr.read() ) {
-	  // should we filter indels?
 	  double af = vr.calculate_af(true);
 	  bcf1_t* v = vr.cursor();
-	  sprintf(buf, "%d:%d:%c:%c", v->rid, v->pos+1, v->d.allele[0][0], v->d.allele[1][0]);
+	  sprintf(buf, "%d:%d:%c:%c", (int32_t)v->rid, (int32_t)v->pos+1, (char)v->d.allele[0][0], (char)v->d.allele[1][0]);
 	  std::map<std::string,int32_t>::iterator it = var2idx.find(buf);
 	  if ( it == var2idx.end() ) {
 	    var_rids.push_back(v->rid);
@@ -268,13 +293,17 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
       sbcd = bam_aux2Z(bcd);
     }
     else {
+      if ( skipEmptyGroup ) { // skip reads with no cell barcodes
+	++nReadsSkipBCD;
+	continue;
+      }      
       if ( n_warning_no_gtag < 10 ) {
 	notice("WARNING: Cannot find Droplet/Cell tag %s from %d-th read %s at %s:%d-%d. Treating all of them as a single group", tagUMI.c_str(), sr.n_read, bam_get_qname(b), chrom, b->core.pos, endpos);
       }
       else if ( n_warning_no_gtag == 10 ) {
 	notice("WARNING: Suppressing 10+ missing Droplet/Cell tag warnings...");
       }
-      ++n_warning_no_gtag;	
+      ++n_warning_no_gtag;
     }
     
     // if barcode is a valid barcode
@@ -282,7 +311,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
       std::map<std::string,int32_t>::iterator it = bcd2idx.find(sbcd);
       if ( it == bcd2idx.end() ) {
 	bcds.push_back(sbcd);
-	int32_t ichunk = str_hash(sbcd, seed) % nchunks; // chunk index
+	int32_t ichunk = (int32_t)(str_hash(sbcd, seed) % nchunks); // chunk index
 	ichunks.push_back(ichunk);
 	ibcd = bcd2idx[sbcd] = (int32_t)bcds.size()-1;	  
       }
@@ -309,6 +338,10 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 	sumi = bam_aux2Z(umi);
       }
       else {
+	if ( skipEmptyUMI ) {
+	  ++nReadsSkipBCD;
+	  continue;
+	}
 	if ( n_warning_no_utag < 10 ) {
 	  notice("WARNING: Cannot find UMI tag %s from %d-th read %s at %s:%d-%d. Treating all of them as a single UMI", tagUMI.c_str(), sr.n_read, bam_get_qname(b), bam_get_chrom(sr.hdr, b), b->core.pos, endpos);
 	}
@@ -322,7 +355,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 
     // we just need to print CHROM POS CIGAR STRAND
     genomeLoci loci;
-    if ( b->core.n_cigar ) { // go over CIGAR string to find 'M's
+    if ( !skipUmiFlag && b->core.n_cigar ) { // go over CIGAR string to find 'M's
       //int32_t rlen = b->core.l_qseq;
       int32_t cpos = b->core.pos;
       int32_t rpos = 0;
@@ -352,19 +385,9 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
       }
       loci.resolveOverlaps();
     }
-
+    
     //if ( ibcd % 1000 == 0 )
     //  notice("%d %s %d", ibcd, bcds[ibcd].c_str(), ichunks[ibcd]);
-  
-    hprintf(wfs[ichunks[ibcd]],"%d\t%s\t%c\t%d", ibcd, sumi.c_str(), revStrand ? '-' : '+', (int32_t)loci.loci.size());
-    for(loci.rewind(); !loci.isend(); loci.next()) {
-      hprintf(wfs[ichunks[ibcd]],"\t%s:%d:%d", loci.it->chrom.c_str(), loci.it->beg1, loci.it->end0 - loci.it->beg1 + 1);
-    }
-
-    if ( noBCF ) {
-      hprintf(wfs[ichunks[ibcd]],"\n");      
-      continue;  // skip the part that reads variants overlaps info
-    }
 
     // genotype all reads together
     //int32_t nv_pass = 0;
@@ -373,45 +396,62 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     int32_t allele, bq;
 
     //for(int32_t i=ibeg; i < ibeg+vr.nbuf; ++i) {
-    for(int32_t i=ibeg; i < (int32_t)var_rids.size(); ++i) {      
-      //if ( i >= (int32_t) ) var_rids.size() continue;
-      bam_get_base_and_qual_and_read_and_qual(b, (uint32_t)var_poss[i]-1, base, qual, rpos, &readseq, &readqual);
-      if ( rpos == BAM_READ_INDEX_NA ) {
-	continue;
+    std::vector<std::string> varBQs;
+    if ( !noBCF ) {
+      for(int32_t i=ibeg; i < (int32_t)var_rids.size(); ++i) {      
+	//if ( i >= (int32_t) ) var_rids.size() continue;
+	bam_get_base_and_qual_and_read_and_qual(b, (uint32_t)var_poss[i]-1, base, qual, rpos, &readseq, &readqual);
+	if ( rpos == BAM_READ_INDEX_NA ) {
+	  continue;
+	}
+	if ( base == 'N' ) continue;
+	
+	++nv_valid;
+	
+	if ( qual-33 < minBQ ) { continue; }
+	if ( rpos < minTD-1 ) { continue; }
+	if ( rpos + minTD > b->core.l_qseq ) { continue; }
+	
+	allele = ( base == var_refs[i] ) ? 0 : ( ( base == var_alts[i] ) ? 1 : 2 );
+	bq = qual-33 > capBQ ? capBQ : qual-33;
+
+	sprintf(buf,"%d:%d:%d", i, allele, bq);
+	varBQs.push_back(buf);
+	//hprintf(wfs[ichunks[ibcd]],"\t%d:%d:%d", i, allele, bq);
       }
-      if ( base == 'N' ) continue;
-
-      ++nv_valid;
-
-      if ( qual-33 < minBQ ) { continue; }
-      if ( rpos < minTD-1 ) { continue; }
-      if ( rpos + minTD > b->core.l_qseq ) { continue; }
-
-      allele = ( base == var_refs[i] ) ? 0 : ( ( base == var_alts[i] ) ? 1 : 2 );
-      bq = qual-33 > capBQ ? capBQ : qual-33;
-
-      hprintf(wfs[ichunks[ibcd]],"\t%d:%d:%d", i, allele, bq);
     }
-    hprintf(wfs[ichunks[ibcd]],"\n");
+
+    // write [BARCODE_ID] [UMI] [STRAND] [N.LOCI] [N.VAR] [LOCUS1] .. [LOCUSN] [N.VAR] [VAR1] .. [VARN]
+    if ( !skipUmiFlag || !varBQs.empty() ) { // write marker info
+      hprintf(wfs[ichunks[ibcd]],"%d\t%s\t%c\t%d\t%d", ibcd, sumi.c_str(), revStrand ? '-' : '+', (int32_t)loci.loci.size(), (int32_t)varBQs.size());
+      for(loci.rewind(); !loci.isend(); loci.next()) {
+	hprintf(wfs[ichunks[ibcd]],"\t%s:%d:%d", loci.it->chrom.c_str(), loci.it->beg1, loci.it->end0 - loci.it->beg1 + 1);
+      }
+      for(int32_t i=0; i < (int32_t)varBQs.size(); ++i)
+	hprintf(wfs[ichunks[ibcd]],"\t%s", varBQs[i].c_str());
+      hprintf(wfs[ichunks[ibcd]],"\n");      
+    }
   }
 
   for(int32_t i=0; i < nchunks; ++i) 
     hts_close(wfs[i]);
 
   // write barcode and SNP information
-  htsFile* wC = hts_open((outPrefix + "/barcodes.tsv.gz").c_str(), "wg");
+  htsFile* wC = hts_open((outPrefix + ".barcodes.tsv.gz").c_str(), "wg");
   hprintf(wC, "ID\tBARCODE\tCHUNK\n" );
   for(int32_t i=0; i < (int32_t)bcds.size(); ++i) {
     hprintf(wC,"%d\t%s\t%d\n", i, bcds[i].c_str(), ichunks[i]);
   }
   hts_close(wC);
-  
-  htsFile* wV = hts_open((outPrefix + "/variants.tsv.gz").c_str(), "wg");
-  hprintf(wV, "ID\tCHROM\tPOS\tREF\tALT\tAF\n");
-  for(int32_t i=0; i < (int32_t)var_rids.size(); ++i) {
-    hprintf(wC,"%d\t%s\t%d\t%c\t%c\t%.5lf\n", i, rchroms[var_rids[i]].c_str(), var_poss[i], var_refs[i], var_alts[i], var_afs[i]);
+
+  if ( !bcfEmpty ) {
+    htsFile* wV = hts_open((outPrefix + ".variants.tsv.gz").c_str(), "wg");
+    hprintf(wV, "ID\tCHROM\tPOS\tREF\tALT\tAF\n");
+    for(int32_t i=0; i < (int32_t)var_rids.size(); ++i) {
+      hprintf(wC,"%d\t%s\t%d\t%c\t%c\t%.5lf\n", i, rchroms[var_rids[i]].c_str(), var_poss[i], var_refs[i], var_alts[i], var_afs[i]);
+    }
+    hts_close(wV);
   }
-  hts_close(wV);
 
   if ( n_warning_no_utag > 10 ) 
     notice("WARNING: Suppressed a total of %d UMI warnings...", n_warning_no_utag);
@@ -436,7 +476,8 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   */
 
   sr.close();
-  //vr.close();
+  //if ( !bcfEmpty ) vr.close();
+  notice("Analysis finished");
 
   return 0;
 }

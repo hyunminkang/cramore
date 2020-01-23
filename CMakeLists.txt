@@ -55,6 +55,7 @@ add_executable(cramore
 	cmd_cram_dense_genotype.cpp
 	cmd_cram_digital_pileup.cpp
 	cmd_cram_dsc_dump.cpp
+	cmd_cram_dsc_dump2pileup.cpp	
 	cmd_cram_dsc_pileup.cpp
 	cmd_cram_flagstat.cpp
 	cmd_cram_freemux2.cpp

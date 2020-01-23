@@ -33,22 +33,23 @@
 #include <list>
 #include <map>
 #include <queue>
+#include <string>
 
 #include "hts_utils.h"
 #include "Error.h"
 
-#define GENO_MASK_MIS 0x01
-#define GENO_MASK_REF 0x02
-#define GENO_MASK_HET 0x04
-#define GENO_MASK_ALT 0x08
-
-#define GENO2MASK(a) (0x01 << ( (a) & 0x11))
+//#define GENO_MASK_MIS 0x01
+//#define GENO_MASK_REF 0x02
+//#define GENO_MASK_HET 0x04
+//#define GENO_MASK_ALT 0x08
+//#define GENO2MASK(a) (0x01 << ( (a) & 0x11))
 
 class FamilyConcordance {
  public:
-  std::vector<int32_t> counts;
+  std::map<std::string,int32_t> counts;
+  //std::vector<int32_t> counts;
   int32_t nKids;
-  int64_t nCells;
+  //int64_t nCells;
   
   FamilyConcordance(int32_t numKids = 0);
 
@@ -62,9 +63,10 @@ class FamilyConcordance {
 
 class DupConcordance {
  public:
-  std::vector<int32_t> counts;
+  std::map<std::string,int32_t> counts;  
+  //std::vector<int32_t> counts;
   int32_t nDups;
-  int64_t nCells;
+  //int64_t nCells;
 
   DupConcordance(int32_t numDups = 0);
   void addGenotype(int32_t g1, int32_t g2);  

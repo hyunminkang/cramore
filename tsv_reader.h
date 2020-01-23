@@ -40,7 +40,8 @@ public:
 
  tsv_reader(const char* filename) : hp(NULL), tbx(NULL), itr(NULL), lstr(0), nfields(0), fields(NULL), nlines(0), delimiter(0) {
     str.l = str.m = 0; str.s = NULL;    
-    open(filename);
+    if ( !open(filename) )
+      error("[E:%s:%s %s] Cannot open file %s for reading", __FILE__, __LINE__, __FUNCTION__, filename);    
   }  
 
   ~tsv_reader() {

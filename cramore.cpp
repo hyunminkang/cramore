@@ -33,6 +33,7 @@ int32_t cmdCramMuxPileup(int32_t argc, char** argv);
 int32_t cmdCramDigitalPileup(int32_t argc, char** argv);
 int32_t cmdCramDscPileup(int32_t argc, char** argv);
 int32_t cmdCramDscDump(int32_t argc, char** argv);
+int32_t cmdCramDscDump2Pileup(int32_t argc, char** argv);
 int32_t cmdCramSimuxlet(int32_t argc, char** argv);
 int32_t cmdCramSparseGenotype(int32_t argc, char** argv);
 int32_t cmdCramDenseGenotype(int32_t argc, char** argv);
@@ -125,7 +126,8 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("mux-pileup", &cmdCramMuxPileup, "Produce pileup of dsc-RNAseq")
     LONG_COMMAND("digital-pileup", &cmdCramDigitalPileup, "Produce pileup of dsc-RNAseq")
     LONG_COMMAND("dsc-pileup", &cmdCramDscPileup, "Produce pileup of dsc-RNAseq")
-    LONG_COMMAND("dsc-dump", &cmdCramDscDump, "Produce a dump of dsc-RNAseq")      
+    LONG_COMMAND("dsc-dump", &cmdCramDscDump, "Produce a file dump of dsc-RNAseq")
+    LONG_COMMAND("dsc-dump2plp", &cmdCramDscDump2Pileup, "Produce a pileup from a dump of dsc-RNAseq")          
     LONG_COMMAND("simuxlet",   &cmdCramSimuxlet,  "Simulate multiplexed dsc-RNAseq droplets")
     LONG_COMMAND("kallisto-count", &cmdScKallistoCount, "Produce digital expression matrix from kallisto-aligned sequence reads")
     LONG_COMMAND("sc-map-stamps", &cmdScMapSTAMPs, "Produce STAMP-map from DropSeq FASTQ files")
