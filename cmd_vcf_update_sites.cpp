@@ -40,7 +40,7 @@ int32_t cmdVcfUpdateSites(int32_t argc, char** argv) {
     LONG_MULTI_STRING_PARAM("rm-info", &info2remove, "Name of INFO field to remove")    
     LONG_PARAM("replace-filter", &replaceFilter, "Replace the FILTER column with the new one")
     LONG_PARAM("replace-qual", &replaceQual, "Replace the QUAL column with the new one")
-    LONG_PARAM("replace-id", &replaceQual, "Replace the ID column with the new one")     
+    LONG_PARAM("replace-id", &replaceID, "Replace the ID column with the new one")     
     LONG_PARAM_GROUP("Output Files", NULL)
     LONG_STRING_PARAM("out",&outVcf, "Output VCF file")
     END_LONG_PARAMS();
