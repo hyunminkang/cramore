@@ -34,9 +34,11 @@
 #include <map>
 #include <queue>
 //#include "bcf_ordered_reader.h"
+extern "C" {
 #include "htslib/vcf.h"
 #include "htslib/hts.h"
 #include "htslib/tbx.h"
+}
 #include "hts_utils.h"
 #include "genome_interval.h"
 #include "interval_tree.h"

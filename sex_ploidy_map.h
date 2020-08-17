@@ -24,9 +24,13 @@
 #ifndef SEX_PLOIDY_MAP_H
 #define SEX_PLOIDY_MAP_H
 
+extern "C" {
 #include "htslib/kseq.h"
 #include "htslib/vcf.h"
+}
+
 #include "hts_utils.h"
+
 
 #define PLOIDY_TYPE_AUTOSOME 0
 #define PLOIDY_TYPE_X 1

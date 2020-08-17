@@ -4,6 +4,7 @@
 #include "sc_drop_seq.h"
 #include "genomeLoci.h"
 #include <sys/stat.h>
+#include <cassert>
 
 // TODO : Record strand info
 // TODO : Reduce memory footprint
@@ -225,8 +226,9 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   }
     
   //if ( rid2tids.empty() || tid2rids.empty() || ( rid2tids.size() != tid2rids.size() ) ) {
-  if ( !bcfEmpty && ( rid2tids.empty() || tid2rids.empty() ) ) {    
-    error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated");
+  if ( !bcfEmpty && ( rid2tids.empty() || tid2rids.empty() ) ) {
+    error("Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated. This usually can be resolved by running 'bcftools reheader -f [ref.fasta.fai] [in.vcf.gz] > [out.vcf.gz]'");
+    //error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated");
   }
 
   int32_t ibeg = 0;
@@ -237,14 +239,16 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 
   int32_t nReadsMultiSNPs = 0, nReadsSkipBCD = 0, nReadsPass = 0, nReadsRedundant = 0, nReadsN = 0, nReadsLQ = 0, nReadsTMP = 0, nReadsFilt = 0;
 
-  std::vector<std::map<std::string, std::pair<genomeLoci,genomeLoci> > > umiLoci;  // fwd/rev pair
+  //notice("foo");
+
+  //std::vector<std::map<std::string, std::pair<genomeLoci,genomeLoci> > > umiLoci;  // fwd/rev pair
 
   while( sr.read() ) { // read SAM file, processing each individual read
     bam1_t* b = sr.cursor();    
     int32_t endpos = bam_endpos(b);
     const char* chrom = bam_get_chrom(sr.hdr, b);
     int32_t tid2rid = bcfEmpty ? -1 : bcf_hdr_name2id(vr.cdr.hdr, chrom);
-    bool noBCF = bcfEmpty;
+    bool noBCF = bcfEmpty || vr.eof;
 
     int32_t bamFlag = bam_get_flag(b);
     if ( bamFlag & sr.filt.exclude_flag )  {
@@ -256,8 +260,12 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
     if ( tid2rid < 0 ) { // no matching BCF entry in the chromosome, skip;
       noBCF = true;
     }
+
+    if ( ( !noBCF ) && ( vr.cursor()->rid >= rchroms.size() ) ) { // new contig absent in the header was introduced
+      error("The contig %s was absent in the VCF header. This happens when contigs in VCF header do not match to actual records. Run 'bcftools reheader -f [ref.fasta.fai] [in.vcf.gz] > [out.vcf.gz] to resolve this problem", chrom);
+    }    
     
-    int32_t n_cleared = noBCF ? 0 : vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );
+    int32_t n_cleared = ( noBCF || vr.eof ) ? 0 : vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );
     ibeg += n_cleared;
     
     // add new snps
@@ -324,6 +332,8 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
       continue;
     }
 
+    //if ( bcd ) free(bcd);
+
     ++nReadsTMP;
 
     // get UMI
@@ -351,6 +361,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 	++n_warning_no_utag;
 	//error("[E:%s] Cannot find UMI tag %d %d %x %s %s %x", __PRETTY_FUNCTION__, sr.nbuf, sr.ridx, sr.cursor(), bcd, utag, umi);
       }
+      //if ( umi ) free(umi);
     }
 
     // we just need to print CHROM POS CIGAR STRAND
@@ -384,6 +395,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
 	}
       }
       loci.resolveOverlaps();
+      //if ( cigar ) free(cigar);
     }
     
     //if ( ibcd % 1000 == 0 )
@@ -475,7 +487,7 @@ int32_t cmdCramDscDump(int32_t argc, char** argv) {
   notice("Total number of pass-filtered reads overlapping with multiple SNPs : %d", nReadsMultiSNPs);
   */
 
-  sr.close();
+  //sr.close();
   //if ( !bcfEmpty ) vr.close();
   notice("Analysis finished");
 

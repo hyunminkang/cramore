@@ -32,15 +32,18 @@
 #include <list>
 #include <map>
 #include <queue>
-#include "htslib/vcf.h"
-#include "htslib/hts.h"
-#include "htslib/tbx.h"
 #include "hts_utils.h"
 #include "genome_interval.h"
 #include "interval_tree.h"
 #include "Error.h"
 #include "genomeChunk.h"
 #include "genomeLoci.h"
+
+extern "C" {
+#include "htslib/vcf.h"
+#include "htslib/hts.h"
+#include "htslib/tbx.h"
+}
 
 /**
  * A class for reading chunked VCF/BCF files.

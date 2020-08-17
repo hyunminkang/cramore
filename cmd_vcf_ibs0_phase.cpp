@@ -2,16 +2,19 @@
 #include "cramore.h"
 #include "bcf_ordered_reader.h"
 #include "compact_matrix.h"
+#include "emPhaser.h"
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
 
 // goal -- for a given chunk (e.g. 100kb), identify pairs with no IBS0 pairs
-int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
+int32_t cmdVcfIBS0Phase(int32_t argc, char** argv) {
   std::string inVcf;
   std::string out;
   int32_t min_hom_gts = 1;
   int32_t verbose = 1000;
-  int32_t batch_size = 10000;
   std::string reg;
-  int32_t min_variant = 1;
+  int32_t seed = 0;
 
   bcf_vfilter_arg vfilt;
   bcf_gfilter_arg gfilt;
@@ -20,7 +23,7 @@ int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
 
   BEGIN_LONG_PARAMS(longParameters)
     LONG_PARAM_GROUP("Input Sites", NULL)
-    LONG_STRING_PARAM("in-vcf",&inVcf, "Input VCF/BCF file")
+    LONG_STRING_PARAM("vcf",&inVcf, "Input VCF/BCF file")
     LONG_STRING_PARAM("region",&reg,"Genomic region to focus on")
 
     LONG_PARAM_GROUP("Variant Filtering Options", NULL)    
@@ -29,9 +32,8 @@ int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
     LONG_STRING_PARAM("exclude-expr",&vfilt.exclude_expr, "Exclude sites for which expression is true")
 
     LONG_PARAM_GROUP("Additional Options", NULL)
-    LONG_INT_PARAM("min-hom",&min_hom_gts, "Minimum number of homozygous genotypes to be counted for IBS0")
-    LONG_INT_PARAM("batch-size",&batch_size, "Size of batches (in # of samples) to calculate the no-IBS0 pairs")
-    LONG_INT_PARAM("min-variant",&min_variant, "Minimum number of variants to present to have output file")
+    LONG_INT_PARAM("min-hom", &min_hom_gts, "Minimum number of homozygous genotypes to be counted for IBS0")
+    LONG_INT_PARAM("seed", &seed, "Random seed")
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out", &out, "Output VCF file name")
@@ -46,6 +48,9 @@ int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
   if ( inVcf.empty() || out.empty() ) {
     error("[E:%s:%d %s] --in-vcf, --out are required parameters",__FILE__,__LINE__,__FUNCTION__);
   }
+
+  if ( seed > 0 ) srand(seed);
+  else srand(std::time(NULL));
 
   std::vector<GenomeInterval> intervals;
   if ( !reg.empty() ) {
@@ -91,22 +96,21 @@ int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
   int32_t nVariant = 0;
   int32_t nsamples = bcf_hdr_nsamples(odr.hdr);
 
-  std::vector<int32_t> nRRs, nAAs;
-
   notice("Started Reading site information from VCF file, identifying %d samples", nsamples);
 
   if ( nsamples == 0 )
     error("FATAL ERROR: The VCF does not have any samples with genotypes");
 
-  bitmatrix bmatRR(nsamples);
-  bitmatrix bmatAA(nsamples);
-
+  //std::vector<uint16_t> genos(nsamples,0);
+  //std::vector<uint8_t>  haps(nsamples*2,0);
+  int bidx = 0;
   int32_t* p_gt = NULL;
   int32_t n_gt = 0;
   int32_t nskip = 0, nmono = 0;
-  uint8_t* gtRR = (uint8_t*)calloc(nsamples, sizeof(uint8_t));
-  uint8_t* gtAA = (uint8_t*)calloc(nsamples, sizeof(uint8_t));  
 
+  // read each variant
+  hap8phaser_t phaser(nsamples);
+  
   for(int32_t k=0; odr.read(iv); ++k) {  // read marker
     // periodic message to user
     if ( k % verbose == 0 )
@@ -142,90 +146,43 @@ int32_t cmdVcfIBS0Summary(int32_t argc, char** argv) {
     if ( bcf_get_genotypes(odr.hdr, iv, &p_gt, &n_gt) < 0 ) {
       error("[E:%s:%d %s] Cannot find the field GT from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr.hdr, iv->rid), iv->pos+1);
     }
-    memset(gtRR, 0, nsamples);
-    memset(gtAA, 0, nsamples);
     int32_t ac = 0, an = 0;
     int32_t gcs[3] = {0,0,0};
+    std::vector<uint8_t> genos(nsamples,0);
     for(int32_t i=0; i < nsamples; ++i) {
       int32_t g1 = p_gt[2*i];
       int32_t g2 = p_gt[2*i+1];
-      int32_t geno;
+      uint8_t geno;
       if ( bcf_gt_is_missing(g1) || bcf_gt_is_missing(g2) ) {
-	//geno = 0;
+	geno = 0; // missing GT = 0
       }
       else {
-	geno = ((bcf_gt_allele(g1) > 0) ? 1 : 0) + ((bcf_gt_allele(g2) > 0) ? 1 : 0);
-	if ( geno == 0 )    { gtRR[i] = 1; }
-	else if ( geno == 2 ) { gtAA[i] = 1; }
-	ac += geno;
+	geno = ((bcf_gt_allele(g1) > 0) ? 1 : 0) + ((bcf_gt_allele(g2) > 0) ? 1 : 0) + 1; // GT = 1,2,3
+	ac += (geno-1);
 	an += 2;
-	++gcs[geno];
+	++gcs[geno-1];
       }
+      genos[i] = geno;
+      //phaser.geno8s[i] |= ((geno & 0x03) << (bidx*2)); // 2 bit encoding of genotypes
     }
-    if ( ( gcs[0] < min_hom_gts ) || ( gcs[2] < min_hom_gts ) ) { ++nmono; }
+
+    if ( ( gcs[0] < min_hom_gts ) || ( gcs[2] < min_hom_gts ) ) continue;
     else {
-      bmatRR.add_row_bytes(gtRR);
-      bmatAA.add_row_bytes(gtAA);
-      nRRs.push_back(gcs[0]);
-      nAAs.push_back(gcs[2]);  
-      ++nVariant;
+      for(int32_t i=0; i < nsamples; ++i)
+	phaser.geno8s[i] |= ((genos[i] & 0x03) << (bidx*2)); // 2 bit encoding of genotypes
+      
+      if ( bidx == 7 ) { // block is complete
+	//std::copy(phaser.geno8s.begin(), phaser.geno8s.end(), genos);
+	phaser.runEMPhase();
+	phaser.printFreq();
+	phaser.printHaplotypes();
+	std::fill(phaser.geno8s.begin(), phaser.geno8s.end(), 0);
+	break;
+      }
+      ++bidx;
     }
   }
   notice("Finished Processing %d markers across %d samples, Skipping %d filtered markers and %d uninformative markers", nVariant, nsamples, nskip, nmono);
 
-  free(gtRR);
-  free(gtAA);  
-
-  if ( nVariant < min_variant ) {
-    notice("Observed only %d informative markers. Skipping IBD segment detection for this chunk...", nVariant);
-    return 0;
-  }
-
-  bmatRR.transpose();
-  bmatAA.transpose();
-
-  notice("Searching for potential IBD segments..");
-  int32_t nibds = 0, k = 0;
-  std::vector<int32_t> byte2cnt;
-  for(int32_t i=0; i < 256; ++i) {
-    int32_t sum = 0;
-    for(int32_t j=0; j < 8; ++j) {
-      if ( ( (0x00ff & i) >> j ) & 0x01 ) ++sum;
-    }
-    byte2cnt.push_back(sum);
-  }
-
-  //return 0;
-
-  htsFile* wf = hts_open(out.c_str(), "w");
-  //hprintf(wf,"ID1\tID2\n");
-
-  for(int32_t i=1; i < nsamples; ++i) {
-    uint8_t* iRR = bmatRR.get_row_bits(i);
-    uint8_t* iAA = bmatAA.get_row_bits(i);
-    for(int32_t j=0; j < i; ++j) {
-      uint8_t* jRR = bmatRR.get_row_bits(j);
-      uint8_t* jAA = bmatAA.get_row_bits(j);
-      //int32_t nibs0 = 0;
-      for(k=0; k < bmatRR.nbytes_col; ++k) {
-	//nibs0 += byte2cnt[( iRR[k] ^ jRR[k] ) & ( iAA[k] ^ jAA[k] ) & 0x0ff];
-	//if ( ( i == 5219 ) && ( j == 65 ) ) {
-	//  uint8_t idx = ( iRR[k] ^ jRR[k] ) & ( iAA[k] ^ jAA[k] ) & 0x0ff;
-	//  printf("%d %d %02x %02x %02x %02x %02x\n", k, nibs0, iRR[k], iAA[k], jRR[k], jAA[k], idx);
-	//}
-	if ( ( iRR[k] ^ jRR[k] ) & ( iAA[k] ^ jAA[k] ) ) { // IBS0 exists
-	  break;
-	}
-      }
-      if ( k == bmatRR.nbytes_col ) { // no IBS0 observed
-	hprintf(wf,"%s\t%s\n",odr.hdr->id[BCF_DT_SAMPLE][i].key, odr.hdr->id[BCF_DT_SAMPLE][j].key);
-	++nibds;
-      }
-    }
-  }
-  notice("Finished searching for potential IBD segments, identifying %d pairs", nibds);
-  hts_close(wf);
-
   return 0;
 }
-

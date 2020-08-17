@@ -118,6 +118,9 @@ int32_t cmdCramDscDump2Pileup(int32_t argc, char** argv) {
     tsv_reader tsv_chunk(buf);
     while(tsv_chunk.read_line() > 0) {
       int ic = tsv_chunk.int_field_at(0);
+
+      //notice("ic = %d",ic);
+      
       std::map<int32_t,int32_t>::iterator it = ibcd_map.find(ic);
       if ( it == ibcd_map.end() )
 	error("Cannot find %d from ibcd_map", ic);

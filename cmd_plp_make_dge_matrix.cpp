@@ -181,7 +181,7 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     int32_t new_id = id_cel2dge[old_id];                      // new_id is the new barcode id 
 
     if ( line % 1000000 == 0 ) {
-      notice("Processing %d UMIs over %d barcodes", line, new_id);
+      notice("Processing %d UMIs over %d barcodes, nfields = %d", line, new_id, tsv_umif.nfields);
     }
     
     // parse the current UMI to add to the current gene count profile

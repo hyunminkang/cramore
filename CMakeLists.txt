@@ -80,7 +80,10 @@ add_executable(cramore
 	cmd_sc_multinom_gibbs.cpp
 	cmd_vcf_delta_svm.cpp
 	cmd_vcf_extract.cpp
+	cmd_vcf_ibs_matrix.cpp
 	cmd_vcf_ibs0_summary.cpp
+	cmd_vcf_ibs0_phase.cpp
+	cmd_vcf_ref_phase.cpp		
 	cmd_vcf_infer_ancestry.cpp
 	cmd_vcf_infer_isaf.cpp
 	cmd_vcf_mendel_dup_conc.cpp
@@ -92,6 +95,7 @@ add_executable(cramore
 	cmd_vcf_svd.cpp
 	cmd_vcf_update_info.cpp
 	cmd_vcf_update_sites.cpp
+	cmd_run_test.cpp
 	commands.cpp
 	commands.h
 	compact_matrix.cpp
@@ -109,12 +113,18 @@ add_executable(cramore
 	dsc_lib.h
 	Error.cpp
 	Error.h
+	emPhaser.h
+	emPhaser.cpp
+	m3vcf.h
+	m3vcf.cpp
+	cmd_m3vcf_subsample.cpp
 	estimator.cpp
 	estimator.h
 	fastaGC.cpp
 	fastaGC.h
 	filter.cpp
 	filter.h
+	bcftools.h
 	frequency_estimator.cpp
 	frequency_estimator.h
 	fVcf.h

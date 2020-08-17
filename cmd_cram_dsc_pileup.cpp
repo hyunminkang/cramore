@@ -4,6 +4,8 @@
 #include "sc_drop_seq.h"
 #include "genomeLoci.h"
 
+#include <cassert>
+
 // TODO : Record strand info
 // TODO : Reduce memory footprint
 int32_t cmdCramDscPileup(int32_t argc, char** argv) {
@@ -131,19 +133,16 @@ int32_t cmdCramDscPileup(int32_t argc, char** argv) {
   std::vector<int32_t> snpids;
   //std::vector<int32_t> cellids;  
   
-  if ( !vr.read() )
-    error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, vr.bcf_file_name.c_str());
-
   /*
   if ( !vr.parse_posteriors(vr.cdr.hdr, vr.cursor(), field.c_str(), 0.01) )
     error("[E:%s] Cannot parse posterior probability at %s:%d", __PRETTY_FUNCTION__, bcf_hdr_id2name(vr.cdr.hdr,vr.cursor()->rid), vr.cursor()->pos+1);
   */
 
   // check if the chromosome names are in the same order between BCF and SAM
-  std::map<int32_t,int32_t> rid2tids;
-  std::map<int32_t,int32_t> tid2rids;
-  std::vector<std::string> tchroms;
-  std::vector<std::string> rchroms;
+  std::map<int32_t,int32_t> rid2tids; // chromosome mapping VCF -> BAM
+  std::map<int32_t,int32_t> tid2rids; // chromosome mapping BAM -> VCF
+  std::vector<std::string> tchroms; // chromosomes appeared in SAM/BAM
+  std::vector<std::string> rchroms; // chromosomes appeared in VCF/BCF
   int32_t ntids = bam_hdr_get_n_targets(sr.hdr);
   int32_t prevrid = -1;
   for(int32_t i=0; i < ntids; ++i) {
@@ -164,8 +163,13 @@ int32_t cmdCramDscPileup(int32_t argc, char** argv) {
   }
 
   if ( rid2tids.empty() || tid2rids.empty() || ( rid2tids.size() != tid2rids.size() ) ) {
-    error("[E:%s] Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated");
+    error("Your VCF/BCF files and SAM/BAM/CRAM files does not have any matching chromosomes, or some chromosome names are duplicated. This usually can be resolved by running 'bcftools reheader -f [ref.fasta.fai] [in.vcf.gz] > [out.vcf.gz]'");
   }
+  notice("Identified %zu overlapping chromosomes between VCF and BAM", rid2tids.size());
+
+  // read a single variant from VCF/BCF
+  if ( !vr.read() )
+    error("[E:%s Cannot read any single variant from %s]", __PRETTY_FUNCTION__, vr.bcf_file_name.c_str());  
   
   //int32_t nv = vr.get_nsamples();
   //double* gps = new double[nv*3];
@@ -202,6 +206,10 @@ int32_t cmdCramDscPileup(int32_t argc, char** argv) {
     if ( tid2rid < 0 ) { // no matching BCF entry in the chromosome, skip;
       noBCF = true;
       //continue;
+    }
+
+    if ( vr.cursor()->rid >= rchroms.size() ) { // new contig absent in the header was introduced
+      error("The contig %s was absent in the VCF header. This happens when contigs in VCF header do not match to actual records. Run 'bcftools reheader -f [ref.fasta.fai] [in.vcf.gz] > [out.vcf.gz] to resolve this problem", chrom);
     }
 
     int32_t n_cleared = vr.clear_buffer_before( bcf_hdr_id2name(vr.cdr.hdr, vr.cursor()->rid), b->core.pos );

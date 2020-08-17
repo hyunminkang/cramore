@@ -74,6 +74,7 @@ int32_t cmdCramSparseGenotype(int32_t argc, char** argv) {
     kstring_t str = {0,0,0};      
 
     while( ( lstr = hts_getline(fp, KS_SEP_LINE, &str) ) >= 0 ) {
+      if ( fields != NULL ) { free(fields); fields = NULL; } // free the fields once allocated          
       fields = ksplit(&str, 0, &n);
       if ( n > 1 )
 	error("[E:%s:%d %s] in-cram-list file %s contains whitespace - # fields = %d, (%s, %s)",__FILE__,__LINE__,__FUNCTION__, inCramList.c_str(), n, str.s + fields[0], str.s + fields[1]);

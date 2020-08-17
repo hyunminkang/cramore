@@ -27,6 +27,7 @@ bool tsv_reader::close() {
 
 int32_t tsv_reader::read_line() {
   if ( itr == NULL ) {
+    //if ( ( str.s != NULL ) && ( lstr > 0 ) ) free(str.s);
     lstr = hts_getline(hp, KS_SEP_LINE, &str);
   }
   else {
@@ -35,8 +36,12 @@ int32_t tsv_reader::read_line() {
 
   if ( lstr <= 0 ) {
     nfields = 0;
-    return lstr;
+    fields = NULL;
+    return 0; // lstr;
   }
+
+  // need to free the previously allocated fields!!
+  if ( fields != NULL ) { free(fields); fields = NULL; }  
   fields = ksplit(&str, delimiter, &nfields);
 
   //notice("lstr = %d, str = %s, delim = %d", lstr, str.s, delimiter);

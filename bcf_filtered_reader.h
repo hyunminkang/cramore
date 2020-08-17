@@ -5,9 +5,6 @@
 #include <cstring>
 #include <vector>
 
-#include "htslib/vcf.h"
-#include "htslib/hts.h"
-#include "htslib/tbx.h"
 #include "filter.h"
 #include "hts_utils.h"
 #include "cramore.h"
@@ -17,6 +14,12 @@
 #include "bcf_filter_arg.h"
 #include "bcf_variant_key.h"
 #include "Error.h"
+
+extern "C" {
+#include "htslib/vcf.h"
+#include "htslib/hts.h"
+#include "htslib/tbx.h"
+}
 
 class BCFFilteredReader {
 public:

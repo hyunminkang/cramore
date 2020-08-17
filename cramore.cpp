@@ -41,6 +41,7 @@ int32_t cmdCramCustomSort(int32_t argc, char** argv);
 int32_t cmdCramFlagStat(int32_t argc, char** argv);
 int32_t cmdCramCompareBQs(int32_t argc, char** argv);
 int32_t cmdCramContextIndelAnalysis(int32_t argc, char** argv);
+int32_t cmdRunTest(int32_t argc, char** argv);
 
 int32_t cmdDgeBarcodeSummary(int32_t argc, char** argv);
 int32_t cmdDgeShuffle(int32_t argc, char** argv);
@@ -51,7 +52,10 @@ int32_t cmdScKallistoCount(int32_t argc, char** argv);
 
 int32_t cmdVcfMendelDupConc(int32_t argc, char** argv);
 int32_t cmdVcfSampleSummary(int32_t argc, char** argv);
+int32_t cmdVcfIBSMatrix(int32_t argc, char** argv);
 int32_t cmdVcfIBS0Summary(int32_t argc, char** argv);
+int32_t cmdVcfIBS0Phase(int32_t argc, char** argv);
+int32_t cmdVcfRefPhase(int32_t argc, char** argv);
 int32_t cmdVcfSqueeze(int32_t argc, char** argv);
 int32_t cmdVcfDeltaSVM(int32_t argc, char** argv);
 int32_t cmdVcfExtract(int32_t argc, char** argv);
@@ -77,6 +81,7 @@ int32_t cmdCramUpdateRG(int32_t argc, char** argv);
 int32_t cmdGtfUtil(int32_t argc, char** argv);
 int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv);
 int32_t cmdPlpFindMuxClust(int32_t argc, char** argv);
+int32_t cmdM3vcfSubsample(int32_t argc, char** argv);
 
 
 int32_t main(int32_t argc, char** argv) {
@@ -86,7 +91,10 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND_GROUP("Processing BCF/VCF", NULL)
     LONG_COMMAND("mendel-dup-conc",&cmdVcfMendelDupConc, "Mendelian concordance analysis")
     LONG_COMMAND("vcf-sample-summary",&cmdVcfSampleSummary, "Sample-level summary from BCF/VCF")
-    LONG_COMMAND("vcf-ibs0-summary",&cmdVcfIBS0Summary, "IBS0 summary from BCF/VCF")    
+    LONG_COMMAND("vcf-ibs-matrix",&cmdVcfIBSMatrix, "Compute IBS matrix between VCFs")    
+    LONG_COMMAND("vcf-ibs0-summary",&cmdVcfIBS0Summary, "IBS0 summary from BCF/VCF (experimental)")
+    LONG_COMMAND("vcf-ibs0-phase",&cmdVcfIBS0Phase, "IBS0-based phasing from BCF/VCF (experimental)")
+    LONG_COMMAND("vcf-ref-phase",&cmdVcfRefPhase, "Reference-based phasing from BCF/VCF (experimental)")    
     LONG_COMMAND("vcf-squeeze",&cmdVcfSqueeze, "Squeeze genotype fields from BCF/VCF")
     LONG_COMMAND("vcf-update-sites",&cmdVcfUpdateSites, "Update VCF site information")
     LONG_COMMAND("vcf-update-info",&cmdVcfUpdateInfo,   "Update VCF INFO fields")    
@@ -142,6 +150,8 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("bed-shuffle",&cmdBedShuffle, "Shuffle BED regions randomly")        
     LONG_COMMAND("fasta-gc-content", &cmdFastaGCContent, "Create GC content profile")
     LONG_COMMAND("gtf-util", &cmdGtfUtil, "A simple GTF utility")
+    LONG_COMMAND("run-test", &cmdRunTest, "Run a test code for sanity checking or debugging (temporary)")    
+    LONG_COMMAND("m3vcf-subsample", &cmdM3vcfSubsample, "Subsample M3VCF")    
     LONG_COMMAND("plp-make-dge-matrix", &cmdPlpMakeDGEMatrix, "Make Digital Expression Matrix from Digital Pileups")
   END_LONG_COMMANDS();
 

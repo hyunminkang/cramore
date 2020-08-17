@@ -4,6 +4,8 @@
 #include "sc_drop_seq.h"
 #include "genomeLoci.h"
 
+#include <cassert>
+
 int32_t cmdCramDigitalPileup(int32_t argc, char** argv) {
   // input/output files
   SAMFilteredReader sr;

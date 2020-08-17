@@ -1,9 +1,12 @@
 #include "cramore.h"
 #include "estimator.h"
-#include "htslib/kseq.h"
 #include "joint_genotype_block_reader.h"
 #include "joint_genotype_block_record.h"
 #include "bam_ordered_reader.h"
+
+extern "C" {
+#include "htslib/kseq.h"
+}
 
 void bam_print_key_values(bam_hdr_t *h, bam1_t *s)
 {
@@ -221,6 +224,7 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
   int32_t n = 0;
   kstring_t str = {0,0,0};      
   while( ( lstr = hts_getline(fp, KS_SEP_LINE, &str) ) >= 0 ) {
+    if ( fields != NULL ) { free(fields); fields = NULL; } // free the fields once allocated        
     fields = ksplit(&str, 0, &n);
     
     if ( ncols == 0 ) ncols = n;

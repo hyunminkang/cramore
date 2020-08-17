@@ -1,7 +1,9 @@
 #include "Error.h"
 #include "PhredHelper.h"
 
+extern "C" {
 #include "htslib/sam.h"
+}
 
 class bamPool {
  public:

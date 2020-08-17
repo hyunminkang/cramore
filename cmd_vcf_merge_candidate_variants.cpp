@@ -1,11 +1,14 @@
 #include "cramore.h"
 #include "estimator.h"
-#include "htslib/kseq.h"
 #include "tsv_reader.h"
 #include "bcf_ordered_reader.h"
 #include "bcf_ordered_writer.h"
 #include "sex_ploidy_map.h"
 #include "frequency_estimator.h"
+
+extern "C" {
+#include "htslib/kseq.h"
+}
 
 #define MAX_SAMPLES 10
 
@@ -222,6 +225,7 @@ int32_t cmdVcfMergeCandidateVariants(int32_t argc, char** argv) {
     int32_t n = 0;
     kstring_t str = {0,0,0};      
     while( ( lstr = hts_getline(fp, KS_SEP_LINE, &str) ) >= 0 ) {
+      if ( fields != NULL ) { free(fields); fields = NULL; } // free the fields once allocated                
       fields = ksplit(&str, 0, &n);
 
       if ( n != 1 )

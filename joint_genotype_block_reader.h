@@ -27,8 +27,6 @@
 #include <string>
 #include <vector>
 #include <zlib.h>
-#include "htslib/kseq.h"
-#include "htslib/vcf.h"
 #include "hts_utils.h"
 #include "joint_genotype_block_record.h"
 #include "bcf_ordered_reader.h"
@@ -38,6 +36,11 @@
 #include "sex_ploidy_map.h"
 #include "frequency_estimator.h"
 #include "Eigen/Dense"
+
+extern "C" {
+#include "htslib/kseq.h"
+#include "htslib/vcf.h"
+}
 
 /**
  * Wrapper for BCFOrderedReader.

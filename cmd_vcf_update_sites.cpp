@@ -149,7 +149,7 @@ int32_t cmdVcfUpdateSites(int32_t argc, char** argv) {
     }
 
     if ( ( !dbsnpVcf.target_loci.empty() ) && ( !dbsnpVcf.target_loci.overlaps(bcf_get_chrom(siteVcf.cdr.hdr, sv), sv->pos+1, sv->pos+1) ) ) {
-      notice("bar %d", sv->pos);      
+      //notice("bar %d", sv->pos);      
       continue;
     }
 

@@ -21,8 +21,6 @@
 #define JOINT_GENOTYPE_BLOCK_RECORD_H
 
 #include <zlib.h>
-#include "htslib/vcf.h"
-#include "htslib/faidx.h"
 #include "bcf_ordered_writer.h"
 #include "variant.h"
 #include "hts_utils.h"
@@ -30,6 +28,11 @@
 #include "sex_ploidy_map.h"
 #include "frequency_estimator.h"
 #include "Eigen/Dense"
+
+extern "C" {
+#include "htslib/vcf.h"
+#include "htslib/faidx.h"
+}
 
 #define FILTER_MASK_OVERLAP_SNP   0x0001
 #define FILTER_MASK_OVERLAP_INDEL 0x0002

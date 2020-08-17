@@ -6,8 +6,11 @@
 #include <cstdlib>
 #include <cstdio>
 
+extern "C" {
 #include "htslib/hts.h"
 #include "htslib/hfile.h"
+}
+
 #include "Error.h"
 
 // This is a generalized version of bcf_ordered_reader class developed by Adrian Tan

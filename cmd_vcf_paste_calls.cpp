@@ -1,11 +1,14 @@
 #include "cramore.h"
 #include "estimator.h"
-#include "htslib/kseq.h"
 #include "tsv_reader.h"
 #include "bcf_ordered_reader.h"
 #include "bcf_ordered_writer.h"
 #include "sex_ploidy_map.h"
 #include "frequency_estimator.h"
+
+extern "C" {
+#include "htslib/kseq.h"
+}
 
 int32_t cmdVcfPasteCalls(int32_t argc, char** argv) {
   std::vector<std::string> inVcfs;

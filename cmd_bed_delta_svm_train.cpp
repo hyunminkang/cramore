@@ -153,6 +153,7 @@ int32_t cmdBedDeltaSVMTrain(int32_t argc, char** argv) {
   int32_t* fields = NULL;
   // model list is assumed to have [INFO_KEY] [MODEL_FILE] [INFO_DESCRIPTION = INFO_KEY if empty]
   for( int32_t i=0; ( lstr = hts_getline(hp, KS_SEP_LINE, &str) ) >= 0; ++i ) {
+    if ( fields != NULL ) { free(fields); fields = NULL; } // free the fields once allocated    
     fields = ksplit(&str, 0, &nfields);
     if ( nfields < 3 )
 	error("[E:%s:%d %s] Less than three columns observed in line %d of %s",__FILE__,__LINE__,__FUNCTION__, i+1, posBed.c_str());
@@ -168,6 +169,7 @@ int32_t cmdBedDeltaSVMTrain(int32_t argc, char** argv) {
   if ( hp == NULL )
     error("[E:%s:%d %s] Cannot open file %s for reading",__FILE__,__LINE__,__FUNCTION__, posBed.c_str());
   for( int32_t i=0; ( lstr = hts_getline(hp, KS_SEP_LINE, &str) ) >= 0; ++i ) {
+    if ( fields != NULL ) { free(fields); fields = NULL; } // free the fields once allocated 
     fields = ksplit(&str, 0, &nfields);
     if ( nfields < 3 )
 	error("[E:%s:%d %s] Less than three columns observed in line %d of %s",__FILE__,__LINE__,__FUNCTION__, i+1, posBed.c_str());

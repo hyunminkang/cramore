@@ -34,9 +34,12 @@
 #include <map>
 #include <queue>
 
+extern "C" {
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/tbx.h"
+}
+
 #include "hts_utils.h"
 
 

@@ -10,6 +10,7 @@
 #include <set>
 #include <ctime>
 #include <cmath>
+#include <cassert>
 
 // Hyun's codes
 #include "params.h"
@@ -23,9 +24,17 @@
 //#include "bcf_ordered_writer.h"
 #include "hts_utils.h"
 
-extern "C" {
-  size_t hts_realloc_or_die(unsigned long, unsigned long, unsigned long, unsigned long, int, void**, char const*);
-}
+//extern "C" {
+//  size_t hts_realloc_or_die(unsigned long, unsigned long, unsigned long, unsigned long, int, void**, char const*);
+//}
+
+//#ifdef __cplusplus
+//extern "C" {
+//#endif
+//  int ks_resize2(kstring_t*, unsigned long);
+//#ifdef __cplusplus
+//}
+//#endif
 
 // bcftools's code
 //#include "filter.h"
