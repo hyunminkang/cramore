@@ -757,7 +757,12 @@ bcf1_t* BCFFilteredReader::read() {
       ++nRead;
       if ( nRead % verbose == 0 )
 	notice("Reading %d variants at %s:%d, Skipping %d, Missing %d.", nRead, bcf_hdr_id2name(cdr.hdr, vbufs[vidx]->rid), vbufs[vidx]->pos+1, nSkip, nMiss);      
-      if ( passed_vfilter() ) return cursor();
+      if ( passed_vfilter() ) {
+	bcf1_t* v = cursor();
+	set_ploidies_by_sex(v);
+	return v;	
+	//return cursor();
+      }
       else {
 	//vidx = (vidx + vbufs.size() - 1) % vbufs.size();
 	//--nbuf;	
