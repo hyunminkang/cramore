@@ -2,6 +2,7 @@
 #include "bcf_filter_arg.h"
 #include "bcf_ordered_reader.h"
 #include "bcf_ordered_writer.h"
+#include "sex_ploidy_map.h"
 
 int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
   std::vector<std::string> inVcfs;
@@ -9,6 +10,13 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
   bcf_vfilter_arg vfilt;
   bcf_gfilter_arg gfilt;
   int32_t verbose = 1000;
+  int32_t xStart = 2699520;
+  int32_t xStop = 154931044;
+  int32_t minDPmaleX = -1;
+  std::string xLabel("X");
+  std::string yLabel("Y");
+  std::string mtLabel("MT");
+  std::string sexMap;  
 
   paramList pl;
 
@@ -22,8 +30,17 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
     LONG_STRING_PARAM("exclude-expr",&vfilt.exclude_expr, "Exclude sites for which expression is true")    
 
     LONG_PARAM_GROUP("Genotype Filtering Options", NULL)    
-    LONG_INT_PARAM("minDP",&gfilt.minDP,"Minimum depth threshold for counting genotypes")
-    LONG_INT_PARAM("minGQ",&gfilt.minGQ,"Minimum depth threshold for counting genotypes") 
+    LONG_INT_PARAM("minDP",&gfilt.minDP,"Minimum depth threshold for filtering genotypes")
+    LONG_INT_PARAM("minGQ",&gfilt.minGQ,"Minimum depth threshold for filtering genotypes")
+    LONG_INT_PARAM("minDP-male-X",&minDPmaleX,"Minimum depth threshold male X chromosomes for filtering genotypes")        
+
+    LONG_PARAM_GROUP("Sex Chromosomes (for --minDP option)",NULL)
+    LONG_STRING_PARAM("sex-map",&sexMap, "Sex map file, containing ID and sex (1 for male and 2 for female) for each individual")    
+    LONG_STRING_PARAM("x-label", &xLabel, "Contig name for X chromosome")
+    LONG_STRING_PARAM("y-label", &yLabel, "Contig name for Y chromosome")
+    LONG_STRING_PARAM("mt-label", &mtLabel, "Contig name for MT chromosome")
+    LONG_INT_PARAM("x-start", &xStart, "Start base position of non-PAR region in X chromosome")
+    LONG_INT_PARAM("x-stop",  &xStop,  "End base position of non-PAR region in X chromosome")        
 
     LONG_PARAM_GROUP("Output Options", NULL)
     LONG_STRING_PARAM("out", &out, "Output VCF file name")
@@ -38,6 +55,9 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
   if ( inVcfs.empty() || out.empty() ) {
     error("[E:%s:%d %s] --in, --out are required parameters",__FILE__,__LINE__,__FUNCTION__);
   }
+
+  // if --minDP-male-X was not set, make it identical to minDP
+  if ( minDPmaleX < 0 ) minDPmaleX = gfilt.minDP;
 
   std::vector<GenomeInterval> intervals;
   BCFOrderedReader* odr = new BCFOrderedReader(inVcfs[0], intervals);
@@ -88,6 +108,9 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
 
   // read a specific marker position
   int32_t k = 0, nskip = 0;
+
+  sex_ploidy_map spmap(xLabel, yLabel, mtLabel, xStart, xStop);
+  spmap.load_sex_map_file(sexMap.empty() ? NULL : sexMap.c_str(), odr->hdr);      
  
   for(int32_t l=0; l < (int32_t)inVcfs.size(); ++l) {
     notice("PROCESSING %d-th VCF file %s", l+1, inVcfs[l].c_str());
@@ -95,7 +118,7 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
     for(; odr->read(iv); ++k) {  // read marker
       if ( k % verbose == 0 )
 	notice("Processing %d markers at %s:%d. Skipped %d markers", k, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1, nskip);
-      
+      int8_t* ploidies = spmap.get_ploidies(iv);
       bcf_unpack(iv, BCF_UN_ALL);
       
       // check --apply-filters
@@ -132,7 +155,9 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
 	  
 	}
 	for(int32_t i=0; i < nsamples; ++i) {
-	  if ( flds[i] < gfilt.minDP ) {
+	  if ( ( ploidies[i] == 0 ) ||
+	       ( ( ploidies[i] == 1 ) && ( flds[i] < minDPmaleX ) ) ||
+	       ( ( ploidies[i] == 2 ) && ( flds[i] < gfilt.minDP ) ) ) {
 	    gts[2*i] = bcf_gt_missing;
 	    gts[2*i+1] = bcf_gt_missing;	    
 	  }
