@@ -141,7 +141,7 @@ bool BAMOrderedReader::jump_to_interval(GenomeInterval& interval)
  */
 bool BAMOrderedReader::initialize_next_interval()
 {
-    if (interval_index!=intervals.size())
+    while (interval_index!=intervals.size())
     {
         intervals[interval_index++].to_string(&str);
         itr = sam_itr_querys(idx, hdr, str.s);
@@ -151,8 +151,7 @@ bool BAMOrderedReader::initialize_next_interval()
             return true;
         }
         
-        fprintf(stderr, "[%s:%d %s] Failed to load interval %s from file: %s\n", __FILE__, __LINE__, __FUNCTION__, str.s, file_name.c_str());
-        exit(1);
+        fprintf(stderr, "Warning: invalid interval %s for file: %s\n", str.s, file_name.c_str());
     }
 
     return false;

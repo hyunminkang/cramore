@@ -100,19 +100,23 @@ bool BCFChunkedReader::jump_to(const char* chr, int32_t pos1) {
 
   char buf[65536];
   sprintf(buf,"%s:%d-%d",chr, pos1, end);
-  load_index();
+  if (!load_index()) {
+    error("[E:%s] cannot load index for VCF/BCF file: %s\n", __PRETTY_FUNCTION__, chunk.current_file_name.c_str());
+  }
   if ( ftype.format == bcf ) {
     //notice("[%s:%d %s] Querying %s", __FILE__, __LINE__, __PRETTY_FUNCTION__, buf);
     if ( itr ) hts_itr_destroy(itr);    
     itr = bcf_itr_querys(idx, hdr, buf);
     if (itr)
       return true;
+    warning("[E:%s] invalid interval %s from file: %s\n", __PRETTY_FUNCTION__, buf, chunk.current_file_name.c_str());
   }
   else if (ftype.format==vcf && ftype.compression==bgzf) {
     if ( itr ) hts_itr_destroy(itr);    
     itr = tbx_itr_querys(tbx, buf);
     if (itr)
       return true;
+    warning("[E:%s] invalid interval %s from file: %s\n", __PRETTY_FUNCTION__, buf, chunk.current_file_name.c_str());
   }
   return false;
 }
@@ -242,18 +246,22 @@ bool BCFChunkedReader::initialize_current_interval() {
     sprintf(buf,"%s:%d-%d",target_intervals.it->chrom.c_str(),
 	    (chunk.chunk_intervals.empty() || chunk.chunk_intervals.it->beg1 < target_intervals.it->beg1 ) ? target_intervals.it->beg1 : chunk.chunk_intervals.it->beg1,
 	    (chunk.chunk_intervals.empty() || chunk.chunk_intervals.it->end0 > target_intervals.it->end0 ) ? target_intervals.it->end0 : chunk.chunk_intervals.it->end0);
-    load_index();
+    if (!load_index()) {
+      error("[E:%s] cannot load index for VCF/BCF file: %s\n", __PRETTY_FUNCTION__, chunk.current_file_name.c_str());
+    }
     if ( ftype.format == bcf ) {
       if ( itr ) hts_itr_destroy(itr);
       itr = bcf_itr_querys(idx, hdr, buf);
       if (itr)
 	return true;
+      warning("[E:%s] invalid interval %s from file: %s\n", __PRETTY_FUNCTION__, buf, chunk.current_file_name.c_str());
     }
     else if (ftype.format==vcf && ftype.compression==bgzf) {
       if ( itr ) hts_itr_destroy(itr);            
       itr = tbx_itr_querys(tbx, buf);
       if (itr)
 	return true;
+      warning("[E:%s] invalid interval %s from file: %s\n", __PRETTY_FUNCTION__, buf, chunk.current_file_name.c_str());
     }
   }
   return false;
@@ -265,11 +273,12 @@ bool BCFChunkedReader::initialize_current_interval() {
 bool BCFChunkedReader::read(bcf1_t *v) {
   //bcf_clear(v);
   //notice("BCFChunkedReader::read() called");
+  int res = 0;
   if ( itr ) {      // when reading by indices
     while( true ) { // loop forever..
       // first, 
-      if ( itr && ( ( ( ftype.format == bcf ) && ( bcf_itr_next(file,itr,v) >= 0 ) ) ||
-		    ( ( ftype.format == vcf ) && ( tbx_itr_next(file,tbx,itr,&s) >= 0 ) ) ) ) {
+      if ( itr && ( ( ( ftype.format == bcf ) && ( (res=bcf_itr_next(file,itr,v)) >= 0 ) ) ||
+		    ( ( ftype.format == vcf ) && ( (res=tbx_itr_next(file,tbx,itr,&s)) >= 0 ) ) ) ) {
 	if ( ftype.format == vcf ) 
 	  vcf_parse1(&s, hdr, v);
 	
@@ -279,6 +288,10 @@ bool BCFChunkedReader::read(bcf1_t *v) {
 	    continue;
 
 	return true;
+      }
+      else if (res < -1) {
+        fprintf(stderr, "[%s:%d %s] Failed to read VCF/BCF record from file: %s\n", __FILE__, __LINE__, __FUNCTION__, chunk.current_file_name.c_str());
+        exit(1);
       }
       else {
 	notice("looking at next target intervals. itr = %x", itr);	
@@ -302,9 +315,15 @@ bool BCFChunkedReader::read(bcf1_t *v) {
   }
   else {
     //notice("iterator absent");        
-    if (bcf_read(file, hdr, v)==0)
+    if ((res=bcf_read(file, hdr, v))==0)
       return true;
-    else if ( chunk.setNextFileName() ) {
+    
+    if (res < -1) {
+      fprintf(stderr, "[%s:%d %s] Failed to read VCF/BCF record from file: %s\n", __FILE__, __LINE__, __FUNCTION__, chunk.current_file_name.c_str());
+      exit(1);
+    }
+    
+    if ( chunk.setNextFileName() ) {
       if ( open_current_file() ) {
 	return (read(v));
       }
