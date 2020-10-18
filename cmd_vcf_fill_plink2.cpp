@@ -136,8 +136,8 @@ int32_t cmdVcfFillPlink2(int32_t argc, char** argv) {
 
     bcf_update_format_float(odw.hdr, nv, fill_dosage_field.c_str(), dss, n_dss);
 
-    float af = sumds / ns;
-    double varExp = (double)sumds * ((double)(ns + ns) - sumds) / (double)ns / (double)ns;
+    float af = sumds / ns / 2.0;
+    double varExp = (double)sumds * ((double)(ns + ns) - sumds) / (double)ns / (double)ns / 2.0;
     double varObs = (double)ssqds / ns - (double)sumds * (double)sumds / (double)ns / (double)ns;
     float machR2 = (float)(varObs / (varExp + 1e-20));
     float fimp = (float)nimp / (float)ns;

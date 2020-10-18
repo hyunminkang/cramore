@@ -43,6 +43,14 @@ typedef khash_t(vdict) vdict_t;
 //}
 //#endif
 
+struct faidx_t {
+    BGZF *bgzf;
+    int n, m;
+    char **name;
+    khash_t(s) *hash;
+    enum fai_format_options format;
+};
+
 
 /**********
  *FAI UTILS
