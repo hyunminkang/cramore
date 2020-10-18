@@ -141,6 +141,8 @@ bool BCFOrderedReader::jump_to_interval(GenomeInterval& interval)
                 return true;
             }
         }
+        
+        fprintf(stderr, "Warning: invalid interval %s from file: %s\n", s.s, file_name.c_str());
     }
 
     return false;
@@ -196,6 +198,8 @@ bool BCFOrderedReader::initialize_next_interval()
                 return true;
             }
         }
+
+        fprintf(stderr, "Warning: invalid interval %s from file: %s\n", s.s, file_name.c_str());
     }
 
     return false;
@@ -206,15 +210,21 @@ bool BCFOrderedReader::initialize_next_interval()
  */
 bool BCFOrderedReader::read(bcf1_t *v)
 {
+    int res = 0;
     if (random_access_enabled)
     {
         if (ftype.format==bcf)
         {
             while(true)
-            {
-                if (itr && bcf_itr_next(file, itr, v)>=0)
+            {   
+                if (itr && (res = bcf_itr_next(file, itr, v))>=0)
                 {
                     return true;
+                }
+                else if (res < -1)
+                {
+                    fprintf(stderr, "[%s:%d %s] Failed to read VCF/BCF record: %s\n", __FILE__, __LINE__, __FUNCTION__, file_name.c_str());
+                    exit(1);
                 }
                 else if (!initialize_next_interval())
                 {
@@ -226,10 +236,15 @@ bool BCFOrderedReader::read(bcf1_t *v)
         {
             while(true)
             {
-                if (itr && tbx_itr_next(file, tbx, itr, &s)>=0)
+                if (itr && (res = tbx_itr_next(file, tbx, itr, &s))>=0)
                 {
                     vcf_parse1(&s, hdr, v);
                     return true;
+                }
+                else if (res < -1)
+                {
+                    fprintf(stderr, "[%s:%d %s] Failed to read VCF/BCF record: %s\n", __FILE__, __LINE__, __FUNCTION__, file_name.c_str());
+                    exit(1);
                 }
                 else if (!initialize_next_interval())
                 {
@@ -240,9 +255,14 @@ bool BCFOrderedReader::read(bcf1_t *v)
     }
     else
     {
-        if (bcf_read(file, hdr, v)==0)
+        if ((res = bcf_read(file, hdr, v))==0)
         {
             return true;
+        }
+        else if (res < -1)
+        {
+            fprintf(stderr, "[%s:%d %s] Failed to read VCF/BCF record: %s\n", __FILE__,__LINE__,__FUNCTION__, file_name.c_str());
+            exit(1);
         }
         else
         {

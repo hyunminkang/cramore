@@ -174,6 +174,8 @@ bool SAMFilteredReader::initialize_current_interval() {
   sprintf(buf, "%s:%d-%d", target_loci.it->chrom.c_str(), target_loci.it->beg1, target_loci.it->end0);
   if ( itr ) hts_itr_destroy(itr);
   itr = sam_itr_querys(idx, hdr, buf);
+  if (!itr)
+    warning("[W:%s] invalid interval %s for file %s", __PRETTY_FUNCTION__, buf, sam_file_name.c_str());
   return itr ? true : false;
 }
 
@@ -227,10 +229,7 @@ bam1_t* SAMFilteredReader::read() {
           exit(1);
       }
       else if ( target_loci.next() ) { // if there are more target regions to read from
-	if (!initialize_current_interval()) {
-          fprintf(stderr, "[%s:%d %s] Error while reading %s\n", __FILE__, __LINE__, __FUNCTION__, sam_file_name.c_str());
-          exit(1);
-        }
+	        initialize_current_interval();
       }
       else {
 	ridx = (ridx + rbufs.size() - 1) % rbufs.size();
