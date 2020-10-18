@@ -59,6 +59,7 @@ int32_t cmdVcfRefPhase(int32_t argc, char** argv);
 int32_t cmdVcfSqueeze(int32_t argc, char** argv);
 int32_t cmdVcfDeltaSVM(int32_t argc, char** argv);
 int32_t cmdVcfExtract(int32_t argc, char** argv);
+int32_t cmdVcfFillPlink2(int32_t argc, char** argv);
 int32_t cmdVcfSVD(int32_t argc, char** argv);
 int32_t cmdVcfInferAncestry(int32_t argc, char** argv);
 int32_t cmdVcfInferISAF(int32_t argc, char** argv);
@@ -125,6 +126,7 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("vcf-delta-svm",&cmdVcfDeltaSVM, "Delta SVM from BCF/VCF using lsgkm")
     LONG_COMMAND("bed-delta-svm-train",&cmdBedDeltaSVMTrain, "Train deltaSVM models")
     LONG_COMMAND("vcf-extract",&cmdVcfExtract, "Extract specific sites from BCF/VCF")
+    LONG_COMMAND("vcf-fill-plink2",&cmdVcfFillPlink2, "Fill-in key information from PLINK2-converted VCF")    
     LONG_COMMAND("cram-procap-detect", &cmdCramProcapDetect, "Detect TSS from PRO-cap data")
     
     LONG_COMMAND_GROUP("Single cell analysis", NULL)

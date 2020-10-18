@@ -80,6 +80,7 @@ add_executable(cramore
 	cmd_sc_multinom_gibbs.cpp
 	cmd_vcf_delta_svm.cpp
 	cmd_vcf_extract.cpp
+	cmd_vcf_fill_plink2.cpp
 	cmd_vcf_ibs_matrix.cpp
 	cmd_vcf_ibs0_summary.cpp
 	cmd_vcf_ibs0_phase.cpp
