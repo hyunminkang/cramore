@@ -154,7 +154,7 @@ int32_t cmdCramUpdateRG(int32_t argc, char** argv) {
     //notice("Header string = %s", str.s);    
     outHeader = sam_hdr_parse(str.l, str.s);
     outHeader->l_text = str.l; outHeader->text = str.s;
-    outHeader = sam_hdr_sanitise(outHeader);
+    //outHeader = sam_hdr_sanitise(outHeader);
     
     if ( outHeader == NULL )
       error("Cannot parse header text %s",str.s);

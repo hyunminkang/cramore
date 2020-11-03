@@ -85,6 +85,10 @@ BAMOrderedReader::BAMOrderedReader(std::string file_name, std::vector<GenomeInte
     }
 
     hdr = sam_hdr_read(file);
+    if ( hdr == NULL ) {
+        fprintf(stderr, "[%s:%d %s] Cannot read header for SAM/BAM/CRAM file: %s\n", __FILE__, __LINE__, __FUNCTION__, file_name.c_str());
+        exit(1);
+    }
     
     s = bam_init1();
 

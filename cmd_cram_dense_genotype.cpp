@@ -311,7 +311,7 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
 
   for(int32_t i=0; i < nsamples; ++i) {
     BAMOrderedReader odr(cram_paths[i], intervals);
-    
+
     if (intervals.size() && !odr.index_loaded) {
       fprintf(stderr, "[%s:%d %s] Cannot open index for %s\n", __FILE__, __LINE__, __FUNCTION__, cram_paths[i].c_str());
       exit(1);
@@ -335,6 +335,7 @@ int32_t cmdCramDenseGenotype(int32_t argc, char** argv) {
 
 	++no_filt_reads;
 	jgbr.process_read(h, s, i);
+
       }
     }
 

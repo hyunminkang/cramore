@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <climits>
 //#include <cstdint>
 #include <cstring>
 #include <cmath>
@@ -40,14 +41,14 @@
 #include <map>
 #include <queue>
 
-extern "C" {
-#include "htslib/kstring.h"
-#include "htslib/khash.h"
-#include "htslib/hts.h"
-#include "htslib/sam.h"
-#include "htslib/vcf.h"
-#include "htslib/vcfutils.h"
-}
+//extern "C" {
+//#include "htslib/kstring.h"
+//#include "htslib/khash.h"
+//#include "htslib/hts.h"
+//#include "htslib/sam.h"
+//#include "htslib/vcf.h"
+//#include "htslib/vcfutils.h"
+//}
 
 /**
  * Splits a line into a vector - PERL style
