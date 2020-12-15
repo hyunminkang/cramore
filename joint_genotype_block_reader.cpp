@@ -23,16 +23,37 @@
 
 #include "joint_genotype_block_reader.h"
 
+KHASH_MAP_INIT_STR(vdict, bcf_idinfo_t)
+typedef khash_t(vdict) vdict_t;
+
 /**
  * Constructor.
  */
 JointGenotypeBlockReader::JointGenotypeBlockReader(std::string filename, std::vector<GenomeInterval>& intervals, std::string out_tmp_prefix, int32_t nsamples, int32_t nUnit, bool printTmpInfo)
 {
-    vm = new VariantManip();  
+    vm = new VariantManip();
+    cur_bam_hdr = NULL;
 
     // read input BCF files and create genotyping records for every variants
     odr = new BCFOrderedReader(filename, intervals);
 
+    // set rid2chrom
+    {
+      vdict_t *d = (vdict_t*)odr->hdr->dict[BCF_DT_CTG];
+      int rid, m = kh_size(d);
+      khint_t k;
+
+      for (k=kh_begin(d); k<kh_end(d); k++) {
+        if ( !kh_exist(d,k) ) continue;
+        rid = kh_val(d,k).id; 
+        const char* chrom = kh_key(d,k);
+	if ( intervals.empty() || ( intervals[0].seq.compare(chrom) == 0 ) ) {
+	  rid2chrom[rid].assign(chrom);
+	  chrom2rid[chrom] = rid;
+	}
+      }
+    }
+    
     tmp_prefix = out_tmp_prefix;
     unit = nUnit;
     
@@ -46,8 +67,10 @@ JointGenotypeBlockReader::JointGenotypeBlockReader(std::string filename, std::ve
       //if ( (rand() % 10000) == 0 )
       //notice("foo");
       int32_t pos1 = bcf_get_pos1(v);
-      
-      if ( ( pos1 < intervals[0].start1 ) || ( pos1 > intervals[0].end1 ) ) continue;
+
+      // if intervals was given, check pos1 to make sure to exclude variants outside the region
+      if ( ( !intervals.empty() ) && ( ( pos1 < intervals[0].start1 ) || ( pos1 > intervals[0].end1 ) ) )
+	continue;
 	
       if ( ( vtype == VT_VNTR ) || ( bcf_get_n_allele(v) != 2 ) ) continue;
 
@@ -204,6 +227,31 @@ int32_t JointGenotypeBlockReader::process_read(bam_hdr_t *h, bam1_t *s, int32_t 
     //wrap bam1_t in AugmentBAMRecord
     as.initialize(h, s);
 
+    // set up rid2tid and perform sanity check
+    if ( cur_bam_hdr != h ) {
+      // reset rid2tid
+      rid2tid.clear();
+
+      // fill rid2tid 
+      for (size_t i=0; i<(size_t)bam_hdr_get_n_targets(h); ++i) {
+	const char* tchrom = bam_hdr_get_target_name(h)[i];
+	std::map<std::string,int32_t>::iterator it = chrom2rid.find(tchrom);
+	if ( it != chrom2rid.end() )
+	  rid2tid[it->second] = i;
+      }
+
+      // check whether rid and tid are consistently ordered
+      int32_t prevtid = -1;
+      for(std::map<int32_t,int32_t>::iterator it = rid2tid.begin(); it != rid2tid.end(); ++it) {
+	if ( it->second <= prevtid )
+	  error("Chromosome ordering between BAM and BCF files are inconsistent");
+	prevtid = it->second;
+      }
+
+      // do not repeat the same procedure for every record
+      cur_bam_hdr = h;
+    }
+
     int32_t tid = (int32_t)bam_get_tid(s);
     int32_t beg1 = (int32_t)as.beg1;
     int32_t end1 = (int32_t)as.end1;
@@ -215,8 +263,8 @@ int32_t JointGenotypeBlockReader::process_read(bam_hdr_t *h, bam1_t *s, int32_t 
     for(int32_t i = lastFirst; i < (int)gRecords.size(); ++i) {
       jgr = gRecords[i];
       
-      //same chromosome
-      if (tid == jgr->rid) {
+      // check if the chromosome names are the same
+      if (tid == rid2tid[jgr->rid]) {
 	if (end1 < jgr->beg1) // read ends earlier than the last record to visit -- no need to investigate
 	  return nvisited;
 	else if (beg1 > jgr->end1) { // read begins later than the last record to visit -- advance the last record
@@ -243,9 +291,9 @@ int32_t JointGenotypeBlockReader::process_read(bam_hdr_t *h, bam1_t *s, int32_t 
 	  //            std::cerr << "\n";
         }
       }
-      else if ( tid < jgr->rid )
+      else if ( tid < rid2tid[jgr->rid] ) // when chromosome name does not match, translate tid to rid and make
 	return nvisited;
-      else if ( tid > jgr->rid ) {
+      else if ( tid > rid2tid[jgr->rid] ) {
 	++lastFirst;	
 	continue;
       }

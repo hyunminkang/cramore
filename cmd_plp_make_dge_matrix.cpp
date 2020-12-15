@@ -151,7 +151,9 @@ int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv) {
     genetypes.push_back("TR_D_gene");
     genetypes.push_back("TR_J_gene");
     genetypes.push_back("TR_J_pseudogene");
-    genetypes.push_back("TR_C_gene");    
+    genetypes.push_back("TR_C_gene");
+    genetypes.push_back("Mt_rRNA");
+    genetypes.push_back("Mt_tRNA");    
   }
 
   // read GTF file

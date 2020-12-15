@@ -414,9 +414,11 @@ void bcf_hdr_transfer_contigs(const bcf_hdr_t *hsrc, bcf_hdr_t *hdest)
         if ( !kh_exist(d,k) ) continue;
         tid = kh_val(d,k).id;
         len[tid] = bcf_hrec_find_key(kh_val(d, k).hrec[0],"length");
-        int j;
-        if ( sscanf(kh_val(d, k).hrec[0]->vals[len[tid]],"%d",&j) )
+	if ( len[tid] >= 0 ) {
+	  int j;
+	  if ( sscanf(kh_val(d, k).hrec[0]->vals[len[tid]],"%d",&j) )
             len[tid] = j;
+	}
         names[tid] = kh_key(d,k);
     }
 
@@ -424,7 +426,10 @@ void bcf_hdr_transfer_contigs(const bcf_hdr_t *hsrc, bcf_hdr_t *hdest)
     for (tid=0; tid<m; tid++)
     {
         s.l = 0;
-        ksprintf(&s, "##contig=<ID=%s,length=%d>", names[tid], len[tid]);
+	if ( len[tid] < 0 )
+	  ksprintf(&s, "##contig=<ID=%s>", names[tid]);
+	else
+	  ksprintf(&s, "##contig=<ID=%s,length=%d>", names[tid], len[tid]);
         bcf_hdr_append(hdest, s.s);
     }
     if (s.m) free(s.s);

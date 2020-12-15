@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 #include <zlib.h>
+#include <map>
 #include "hts_utils.h"
 #include "joint_genotype_block_record.h"
 #include "bcf_ordered_reader.h"
@@ -51,80 +52,84 @@ extern "C" {
  */
 class JointGenotypeBlockReader
 {
-    public:
+public:
 
-    ///////
-    //i/o//
-    ///////
-    BCFOrderedReader* odr; // anchor VCF
-    int32_t unit;          // Number of variants per block
+  ///////
+  //i/o//
+  ///////
+  BCFOrderedReader* odr; // anchor VCF
+  int32_t unit;          // Number of variants per block
+  std::map<int32_t,std::string> rid2chrom;
+  std::map<std::string,int32_t> chrom2rid;
+  bam_hdr_t* cur_bam_hdr;
+  std::map<int32_t,int32_t> rid2tid;
 
-    //////////////////
-    //buffer related//
-    //////////////////
-    std::vector<JointGenotypeBlockRecord*> gRecords;
-    std::string chrom;
-    AugmentedBAMRecord as;
-    Variant variant;
+  //////////////////
+  //buffer related//
+  //////////////////
+  std::vector<JointGenotypeBlockRecord*> gRecords;
+  std::string chrom;
+  AugmentedBAMRecord as;
+  Variant variant;
 
-    int32_t lastFirst;
-    //int32_t currentSampleIndex;
+  int32_t lastFirst;
+  //int32_t currentSampleIndex;
 
-    ///////////
-    //options//
-    ///////////
-    bool output_annotations;
+  ///////////
+  //options//
+  ///////////
+  bool output_annotations;
     
 
-    /////////
-    //stats//
-    /////////
-    uint32_t no_snps_genotyped;
-    uint32_t no_indels_genotyped;
-    uint32_t no_vntrs_genotyped;
+  /////////
+  //stats//
+  /////////
+  uint32_t no_snps_genotyped;
+  uint32_t no_indels_genotyped;
+  uint32_t no_vntrs_genotyped;
 
-    /////////
-    //tools//
-    /////////
-    VariantManip *vm;
-    //LogTool lt;
+  /////////
+  //tools//
+  /////////
+  VariantManip *vm;
+  //LogTool lt;
 
-    std::string tmp_prefix;
-    std::vector<std::string> sample_names;
-    std::vector<double> sample_contams;
-    Eigen::MatrixXd eV;
-    //Eigen::BDCSVD<Eigen::MatrixXd>* pSVD;
-    frequency_estimator* pFreqEst;
+  std::string tmp_prefix;
+  std::vector<std::string> sample_names;
+  std::vector<double> sample_contams;
+  Eigen::MatrixXd eV;
+  //Eigen::BDCSVD<Eigen::MatrixXd>* pSVD;
+  frequency_estimator* pFreqEst;
 
-    std::vector<int32_t> blockStarts;
-    std::vector<int32_t> blockEnds;
-    std::vector<int32_t>  blockIDs;
-    //std::vector<htsFile*> blockFHs;
-    std::vector<gzFile> blockFHs;
-    std::vector<std::string> blockFNs;
-    uint8_t* blockPLs;
-    uint8_t* blockADs;
+  std::vector<int32_t> blockStarts;
+  std::vector<int32_t> blockEnds;
+  std::vector<int32_t>  blockIDs;
+  //std::vector<htsFile*> blockFHs;
+  std::vector<gzFile> blockFHs;
+  std::vector<std::string> blockFNs;
+  uint8_t* blockPLs;
+  uint8_t* blockADs;
     
 
-    /**
-     * Constructor.
-     */
-    JointGenotypeBlockReader(std::string in_vcf_filename, std::vector<GenomeInterval>& intervals, std::string out_tmp_prefix, int32_t nsamples, int32_t nUnit, bool printTmpInfo);
-    ~JointGenotypeBlockReader();
+  /**
+   * Constructor.
+   */
+  JointGenotypeBlockReader(std::string in_vcf_filename, std::vector<GenomeInterval>& intervals, std::string out_tmp_prefix, int32_t nsamples, int32_t nUnit, bool printTmpInfo);
+  ~JointGenotypeBlockReader();
 
-    void set_sample(int32_t sampleIndex, const char* sampleName, double contam, std::vector<double>& evec);
-    void flush_sample(int32_t sampleIndex);
-    void close_blocks();
-    void remove_temp_files();
+  void set_sample(int32_t sampleIndex, const char* sampleName, double contam, std::vector<double>& evec);
+  void flush_sample(int32_t sampleIndex);
+  void close_blocks();
+  void remove_temp_files();
     
-    /**
-     * Collects sufficient statistics from read for variants to be genotyped.
-     */
-    int32_t process_read(bam_hdr_t *h, bam1_t *s, int32_t sampleIndex);
+  /**
+   * Collects sufficient statistics from read for variants to be genotyped.
+   */
+  int32_t process_read(bam_hdr_t *h, bam1_t *s, int32_t sampleIndex);
 
-    inline int32_t numVariants() { return (int32_t)gRecords.size(); }
-    bcf1_t* flush_variant(int32_t variantIndex, bcf_hdr_t* hdr, sex_ploidy_map& spmap);
-    void write_header(BCFOrderedWriter* odw, bool printTmpInfo = false);
+  inline int32_t numVariants() { return (int32_t)gRecords.size(); }
+  bcf1_t* flush_variant(int32_t variantIndex, bcf_hdr_t* hdr, sex_ploidy_map& spmap);
+  void write_header(BCFOrderedWriter* odw, bool printTmpInfo = false);
 };
 
 #endif
