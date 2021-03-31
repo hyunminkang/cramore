@@ -6,7 +6,6 @@ ancestry_estimator::ancestry_estimator(std::vector<double*>* _pLoadings, std::ve
   if ( _pProbs == NULL ) error("[E:%s:%d %s] Invalid genotype likelioods", __FILE__, __LINE__, __PRETTY_FUNCTION__ );
   if ( pLoadings->size() * 3 != pProbs->at(0).size() )
     error("Number of markers do not match between PC loadings and likelihoods : %u vs %u", pLoadings->size(), pProbs->at(0).size());
-  //notice("[%s] Finishing",__PRETTY_FUNCTION__);
 }
 
 double ancestry_estimator::optimizeLLK(int32_t idx, double* optPC) {

@@ -22,6 +22,8 @@ endif()
 
 message(STATUS ${HTS_LIBRARIES})
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+#include_directories(${CMAKE_BINARY_DIR} ${HTS_INCLUDE_DIRS})
 include_directories(${HTS_INCLUDE_DIRS})
 
 add_executable(cramore

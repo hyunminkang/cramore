@@ -1,6 +1,7 @@
 #include "cramore.h"
 #include "bcf_filtered_reader.h"
 #include "ancestry_estimator.h"
+//#include "ancestry_estimator_lbfgs.h"
 #include <map>
 #include <string>
 #include <ctime>
@@ -18,6 +19,7 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
   bool gtApprox = false;
   int32_t numPC = 4;
   int32_t seed = 0;
+  double tol = 1e-6;
 
   bfr.vfilt.maxAlleles = 2;
   bfr.verbose = 10000;
@@ -33,6 +35,7 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
     LONG_PARAM_GROUP("Analysis Options", NULL)
     LONG_PARAM("gt-approx",&gtApprox, "Use GT-based approximation to convert GT into phred-scale likelihoods")    
     LONG_DOUBLE_PARAM("gt-error",&gtError, "Per-allele error for GT-based approximation to use")
+    LONG_DOUBLE_PARAM("tol",&tol, "Tolerance parameters on the likelihood to determine convergence")    
     LONG_INT_PARAM("seed",&seed, "Randome seed to set (default is to use clock)")
 
     LONG_PARAM_GROUP("Options to specify when chunking is used", NULL)    
@@ -167,7 +170,8 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
 
   notice("Estimating ancestry...");
   // Perform ancestry estimator
-  ancestry_estimator ancest( &loadings, &probs, numPC, 0.5/(matv.size()));
+  ancestry_estimator ancest( &loadings, &probs, numPC, 0.5/(matv.size()), tol);
+  //ancestry_estimator_lbfgs ancest( &loadings, &probs, numPC, 0.5/(matv.size()));  
   //double llk;
   double* optPC = new double[numPC];
   htsFile* wf = hts_open(outPrefix.c_str(),"w");
