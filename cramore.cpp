@@ -80,6 +80,7 @@ int32_t cmdBgenToVcf(int32_t argc, char** argv);
 int32_t cmdCramVerifyBam(int32_t argc, char** argv);
 int32_t cmdCramUpdateRG(int32_t argc, char** argv);
 int32_t cmdGtfUtil(int32_t argc, char** argv);
+int32_t cmdTsvUtil(int32_t argc, char** argv);
 int32_t cmdPlpMakeDGEMatrix(int32_t argc, char** argv);
 int32_t cmdPlpFindMuxClust(int32_t argc, char** argv);
 int32_t cmdM3vcfSubsample(int32_t argc, char** argv);
@@ -152,6 +153,7 @@ int32_t main(int32_t argc, char** argv) {
     LONG_COMMAND("bed-shuffle",&cmdBedShuffle, "Shuffle BED regions randomly")        
     LONG_COMMAND("fasta-gc-content", &cmdFastaGCContent, "Create GC content profile")
     LONG_COMMAND("gtf-util", &cmdGtfUtil, "A simple GTF utility")
+    LONG_COMMAND("tsv-util", &cmdTsvUtil, "A simple TSV utility (for testing purpose)")    
     LONG_COMMAND("run-test", &cmdRunTest, "Run a test code for sanity checking or debugging (temporary)")    
     LONG_COMMAND("m3vcf-subsample", &cmdM3vcfSubsample, "Subsample M3VCF")    
     LONG_COMMAND("plp-make-dge-matrix", &cmdPlpMakeDGEMatrix, "Make Digital Expression Matrix from Digital Pileups")

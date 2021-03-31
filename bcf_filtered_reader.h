@@ -137,11 +137,13 @@ public:
   // parse contents
   bool parse_genotypes(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
   bool parse_likelihoods(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "PL");
+  bool approx_likelihoods_from_gt(int32_t perAlleleErr = 30);
   bool parse_posteriors(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "GP", double gt_error_offset = 1e-4);  
   bool parse_dosages(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL, const char* name = "DS");
   bool parse_int_fields(const char* name, bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
   bool parse_float_fields(const char* name, bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
   std::string& get_var_ID(bcf_hdr_t* hdr=NULL, bcf1_t* v=NULL);
+  static void update_var_ID(const char* old_var_id, std::string& new_var_id); // update variant ID settings
   bool set_ploidies_by_sex(bcf1_t* v=NULL);
 
   // calculate summary statistics

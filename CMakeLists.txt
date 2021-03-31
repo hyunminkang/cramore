@@ -78,6 +78,7 @@ add_executable(cramore
 	cmd_sc_map_stamps.cpp
 	cmd_sc_multinom_em.cpp
 	cmd_sc_multinom_gibbs.cpp
+	cmd_tsv_util.cpp
 	cmd_vcf_delta_svm.cpp
 	cmd_vcf_extract.cpp
 	cmd_vcf_fill_plink2.cpp

@@ -1,5 +1,8 @@
 #include "bcf_filtered_reader.h"
 
+#define min2(a,b) ((a)<(b) ? (a) : (b))
+#define max2(a,b) ((a)>(b) ? (a) : (b))
+
 void BCFFilteredReader::init_params() {
   if ( bcf_file_name.empty() )
     error("[%s:%d %s] bcf_file_name is empty", __FILE__, __LINE__, __PRETTY_FUNCTION__);
@@ -247,6 +250,42 @@ bool BCFFilteredReader::parse_genotypes(bcf_hdr_t* hdr, bcf1_t* v) {
   return true;
 }
 
+bool BCFFilteredReader::approx_likelihoods_from_gt(int32_t perAlleleErr) {
+  // assume that genotypes were already parsed (maybe we need to add the routine to check later)
+  int32_t nalleles = cursor()->n_allele;
+  int32_t ngenos = (nalleles+1)*nalleles/2;
+  int32_t nsamples = bcf_hdr_nsamples(cdr.hdr);
+
+  //notice("nsamples = %d", nsamples);
+
+  pls = (nsamples > 0 ? (int32_t*) realloc(pls, sizeof(int32_t)*ngenos*nsamples) : NULL);
+  n_pls = ngenos * nsamples;
+  memset(pls, 0, sizeof(int32_t)*n_pls);
+
+  // ignore ploidies for now...
+  int32_t i, j, k, l, icol;
+  for(i=0; i < nsamples; ++i) {
+    icol = i*ngenos;    
+    for(j=0, l=0; j < nalleles; ++j) {
+      for(k=0; k <= j; ++k, ++l) {
+	int32_t a1 = bcf_gt_allele(gts[i*2]);
+	int32_t a2 = bcf_gt_allele(gts[i*2+1]);
+	// for each of the allele if gt mismatches, add perAlleleErr	
+	if ( ( a1 >= 0 ) && ( a2 >= 0 )  ) { // non-missing genotypes
+	  if ( min2(a1,a2) != k ) 
+	    pls[icol+l] += perAlleleErr;
+	  if ( max2(a1,a2) != j )
+	    pls[icol+l] += perAlleleErr;
+	}
+      }
+    }
+  }
+
+  //notice("%d %d %d %d %d %d %d %d %d",pls[0], pls[1], pls[2], pls[3], pls[4], pls[5], pls[6], pls[7], pls[8]);
+  
+  return true;
+}
+
 bool BCFFilteredReader::parse_likelihoods(bcf_hdr_t* hdr, bcf1_t* v, const char* name) {
   if ( hdr == NULL ) hdr = cdr.hdr;
   if ( v == NULL ) v = cursor();
@@ -486,6 +525,31 @@ bool BCFFilteredReader::parse_float_fields(const char* name, bcf_hdr_t* hdr, bcf
   return true;  
 }
 
+// update variant ID into a new format if old format was used.
+// OLD FORMAT [CHROM]:[POS 0-based]:[REF]_[ALT]
+// NEW FORMAT [CHROM]:[POS 1-based]:[REF]:[ALT]
+void BCFFilteredReader::update_var_ID(const char* old_var_id, std::string& new_var_id) {
+  if ( strchr(old_var_id,'_') == NULL ) { // already new ID format
+    new_var_id.assign(old_var_id);
+  }
+  else {
+    char buf[255];
+    const char* pcolon1 = strchr(old_var_id, ':');
+    const char* pcolon2 = (pcolon1 == NULL) ? NULL : strchr(pcolon1+1,':');
+    if ( ( pcolon1 == NULL ) || ( pcolon2 == NULL ) ) { 
+      warning("BCFFilteredReader::update_var_ID(): Unrecognized format of variant ID - %s. Skipping..", old_var_id);
+      new_var_id.assign(old_var_id);
+    }
+    else {
+      new_var_id.assign(old_var_id, 0, pcolon1-old_var_id+1); // add CHROM
+      sprintf(buf, "%d", atoi(pcolon1+1)+1);
+      new_var_id += buf;     // add POS 1-based
+      new_var_id += pcolon2; // add allele info
+      std::replace( new_var_id.begin(), new_var_id.end(), '_', ':' ); // replace individual characters
+    }
+  }
+}
+
 std::string& BCFFilteredReader::get_var_ID(bcf_hdr_t* hdr, bcf1_t* v) {
   if ( hdr == NULL ) hdr = cdr.hdr;
   if ( v == NULL ) v = cursor();
@@ -493,10 +557,12 @@ std::string& BCFFilteredReader::get_var_ID(bcf_hdr_t* hdr, bcf1_t* v) {
   varID.assign(bcf_get_chrom(cdr.hdr,v));
   varID += ":";
   char buf[256];
-  sprintf(buf,"%d",(int32_t)v->pos);
+  //sprintf(buf,"%d",(int32_t)v->pos);
+  sprintf(buf,"%d",(int32_t)v->pos+1); // use 1-based position instead
   varID += buf;
   for(int32_t i=0; i < v->n_allele; ++i) {
-    varID += (i == 0 ? ":" : "_");
+    //varID += (i == 0 ? ":" : "_");
+    varID += ":"; // use : as delimiter constantly
     varID += v->d.allele[i];
   }
   return varID;

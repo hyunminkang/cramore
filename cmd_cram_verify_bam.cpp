@@ -122,12 +122,13 @@ int32_t cmdCramVerifyBam(int32_t argc, char** argv) {
 	error("[E:%s:%d %s] observed %d < %d+2 columns in the file",__FILE__,__LINE__,__PRETTY_FUNCTION__, ncols, numPC);
       
     double* v = new double[numPC+1];
-    //std::vector<double>& v = var2u[str_field_at(0)];
-    //v.resize(numPC+1);
     for(int32_t i=0; i <= numPC; ++i) {
       v[i] = tsv_svd_u.double_field_at(i+1);
     }
-    var2u[tsv_svd_u.str_field_at(0)].ud = v;
+    std::string varid;
+    BCFFilteredReader::update_var_ID(tsv_svd_u.str_field_at(0), varid);
+    var2u[varid.c_str()].ud = v;    
+    //var2u[tsv_svd_u.str_field_at(0)].ud = v;
   }
   
   tsv_reader tsv_svd_v((svdPrefix+".V.gz").c_str());

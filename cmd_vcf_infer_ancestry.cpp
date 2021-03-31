@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <ctime>
+#include <cmath>
 
 //typedef std::map<std::string,double*>::iterator itU_t;
 
@@ -13,6 +14,8 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
   std::string outPrefix;
   std::string smID;
   std::string smList;
+  double gtError = 0.001;
+  bool gtApprox = false;
   int32_t numPC = 4;
   int32_t seed = 0;
 
@@ -26,6 +29,10 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
     LONG_STRING_PARAM("svd",&svdPrefix, "Prefix of SVD files (.fUD.gz, .V.gz)")
     LONG_STRING_PARAM("vcf",&bfr.bcf_file_name, "Input VCF/BCF file")
     LONG_DOUBLE_PARAM("thin",&bfr.vfilt.probThin, "Probability to thin the variants from BCF")
+
+    LONG_PARAM_GROUP("Analysis Options", NULL)
+    LONG_PARAM("gt-approx",&gtApprox, "Use GT-based approximation to convert GT into phred-scale likelihoods")    
+    LONG_DOUBLE_PARAM("gt-error",&gtError, "Per-allele error for GT-based approximation to use")
     LONG_INT_PARAM("seed",&seed, "Randome seed to set (default is to use clock)")
 
     LONG_PARAM_GROUP("Options to specify when chunking is used", NULL)    
@@ -67,12 +74,14 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
       error("[E:%s:%d %s] observed %d < %d+2 columns in the file",__FILE__,__LINE__,__PRETTY_FUNCTION__, ncols, numPC);
 
     double* v = new double[numPC+1];
-    //std::vector<double>& v = var2u[str_field_at(0)];
-    //v.resize(numPC+1);
     for(int32_t i=0; i <= numPC; ++i) {
       v[i] = tsv_svd_u.double_field_at(i+1);
     }
-    var2u[tsv_svd_u.str_field_at(0)] = v;
+    std::string varid;
+    BCFFilteredReader::update_var_ID(tsv_svd_u.str_field_at(0), varid);
+    //if ( strcmp(tsv_svd_u.str_field_at(0),"chr1:833067:G_A") == 0)
+    //  notice("[%s] [%s] %f %f %f %f\n",tsv_svd_u.str_field_at(0), varid.c_str(), v[0], v[1], v[2], v[3]);
+    var2u[varid] = v;
   }
 
   notice("Reading sample eigenvectors");  
@@ -124,15 +133,28 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
   std::vector< std::vector<double> > probs; // nsample * (3 * nvar) matrix
   probs.resize(ns);
 
+  int32_t perAlleleErr = floor(0.5-log(gtError)/log(10)*10);
+
   // read genotype likelihoods
   while( bfr.read() ) {
-    //notice("foo");
-    bfr.parse_likelihoods();
-    //notice("bar");    
     std::string& varID = bfr.get_var_ID();
-    itU = var2u.find(varID);
+    itU = var2u.find(varID);    
     if ( itU != var2u.end() ) { // variant found
-      //notice("goo");          
+      //notice("goo %s %zu", varID.c_str(), loadings.size());
+
+      // read likelihoods
+      if ( gtApprox ) {
+	//notice("step1");
+	bfr.parse_genotypes();
+	//notice("step2");
+	bfr.approx_likelihoods_from_gt(perAlleleErr);
+	//notice("step3");	
+      }
+      else {
+	bfr.parse_likelihoods();
+      }
+
+      // push the PCA loadings
       loadings.push_back(itU->second);
       for(int32_t i=0; i < ns; ++i) {
 	probs[i].push_back( phredConv.phred2Prob[bfr.get_likelihood_at(i*3)] );
@@ -141,6 +163,7 @@ int32_t cmdVcfInferAncestry(int32_t argc, char** argv) {
       }
     }
   }
+  notice("Finished loading %zu informative markers",loadings.size());
 
   notice("Estimating ancestry...");
   // Perform ancestry estimator
