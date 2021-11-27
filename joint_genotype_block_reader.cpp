@@ -408,7 +408,7 @@ void JointGenotypeBlockReader::write_header(BCFOrderedWriter* odw, bool printTmp
     bcf_hdr_append(odw->hdr, "##INFO=<ID=FLT20,Number=20,Type=Float,Description=\"20 sufficient statistics for enabling hierarchical calls\">\n");  
   bcf_hdr_append(odw->hdr, "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
   bcf_hdr_append(odw->hdr, "##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">\n");
-  bcf_hdr_append(odw->hdr, "##FORMAT=<ID=AD,Number=A,Type=Integer,Description=\"Allele Depth\">\n");
+  bcf_hdr_append(odw->hdr, "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allele Depth\">\n");
   bcf_hdr_append(odw->hdr, "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Total Allele Depth, including unidentifiable alleles\">\n");
   bcf_hdr_append(odw->hdr, "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scale Genotype Likelihoods\">\n");
 
