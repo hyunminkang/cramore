@@ -19,7 +19,7 @@ class ancestry_estimator {
   double llk1;
   int32_t iter;
 
-  ancestry_estimator(std::vector<double*>* _pLoadings, std::vector< std::vector<double> >* _pProbs, int32_t _ndims, doubloe _minMAF, double tol = 1e-6);
+  ancestry_estimator(std::vector<double*>* _pLoadings, std::vector< std::vector<double> >* _pProbs, int32_t _ndims, double _minMAF, double tol = 1e-6);
   double optimizeLLK(int32_t idx, double* optPC);
   
   class pc_llk_func : public VectorFunc {
