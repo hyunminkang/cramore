@@ -76,7 +76,7 @@ class var_dict {
     key.pos1 = (uint64_t)atoll(varid);
     s = varid = s+1;
 
-    while( ( *s ) && ( *s != '_' ) ) ++s;
+    while( ( *s ) && ( *s != ':' ) ) ++s;
     if ( *s == '\0' ) return false;
     key.ref.assign(varid, s-varid);
     s = varid = s+1;
