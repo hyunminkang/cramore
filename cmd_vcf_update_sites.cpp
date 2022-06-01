@@ -236,7 +236,7 @@ int32_t cmdVcfUpdateSites(int32_t argc, char** argv) {
 	  //debug if ( gv->pos > 60200 ) abort();
 
 	  //debug if ( (ret = bcf_update_info(odw.hdr, gv, info2update[i].c_str(), values, ret, htype)) < 0 )
-	  if ( bcf_update_info(odw.hdr, gv, info2update[i].c_str(), values, ret, htype) < 0 )	    
+	  if ( bcf_update_info(odw.hdr, gv, info2update[i].c_str(), htype == BCF_HT_FLAG ? nullptr : values, htype == BCF_HT_STR ? 1 : ret, htype) < 0 )	    
 	    error("[E:%s:%d %s] Failed to update INFO field %s", info2update[i].c_str());
 
 	  //debug notice("Updated : ret=%d, nvalues = %d, type = %d, len = %d, (i,f)=(%d,%f)", ret, nvalues, info->type, info->len, info->v1.i, info->v1.f);	  
