@@ -7,7 +7,7 @@ BCF/VCF files in various contexts of sequence analysis.
 
 Before installing `cramore`, you need to install
 [htslib](https://github.com/samtools/htslib) in the same directory you
-want to install demuxlet (i.e. demuxlet and htslib should be
+want to install cramore (i.e. cramore and htslib should be
 siblings). You also need [cmake](https://cmake.org/) installed in your system.
 
 After installing htslib, you can clone the current snapshot of this repository to install as well
