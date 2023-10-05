@@ -150,10 +150,21 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
       }
 
       if ( gfilt.minDP > 0 ) {
-	if ( bcf_get_format_int32(odr->hdr, iv, "DP", &flds, &n_flds) < 0 ) {
-	  error("[E:%s:%d %s] Cannot find the field DP from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
+	if ( bcf_get_format_int32(odr->hdr, iv, "AD", &flds, &n_flds) < 0 ) {
+	  error("[E:%s:%d %s] Cannot find the field AD from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
 	  
 	}
+
+        if (2*nsamples != n_flds) {
+          error("[E:%s:%d %s] Expected biallelic AD field at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
+        }
+
+
+        for(int32_t i=0; i < nsamples; ++i) {
+          flds[i] = flds[2*i] + flds[2*i+1];
+        }
+        n_flds = nsamples;
+
 	for(int32_t i=0; i < nsamples; ++i) {
 	  if ( ( ploidies[i] == 0 ) ||
 	       ( ( ploidies[i] == 1 ) && ( flds[i] < minDPmaleX ) ) ||
