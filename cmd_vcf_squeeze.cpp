@@ -102,9 +102,9 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
   odw.write_hdr();  
 
   int32_t nsamples = bcf_hdr_nsamples(odr->hdr);
-  int32_t n_gts = 0, n_flds = 0;
-  int32_t* gts = (int32_t*) calloc( nsamples * 2, sizeof(int32_t) );
-  int32_t* flds = (int32_t*) calloc( nsamples, sizeof(int32_t) );  
+  int32_t n_gts = 0, n_flds =0, max_n_flds = 0;
+  int32_t* gts = NULL; //(int32_t*) calloc( nsamples * 2, sizeof(int32_t) );
+  int32_t* flds = NULL; //(int32_t*) calloc( nsamples, sizeof(int32_t) );  
 
   // read a specific marker position
   int32_t k = 0, nskip = 0;
@@ -150,18 +150,17 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
       }
 
       if ( gfilt.minDP > 0 ) {
-	if ( bcf_get_format_int32(odr->hdr, iv, "AD", &flds, &n_flds) < 0 ) {
+	if ( (n_flds = bcf_get_format_int32(odr->hdr, iv, "AD", &flds, &max_n_flds)) < 0 ) {
 	  error("[E:%s:%d %s] Cannot find the field AD from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
 	  
 	}
 
-        if (2*nsamples != n_flds) {
-          error("[E:%s:%d %s] Expected biallelic AD field at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
-        }
-
-
+        int32_t nallele = n_flds / nsamples;
         for(int32_t i=0; i < nsamples; ++i) {
-          flds[i] = flds[2*i] + flds[2*i+1];
+          flds[i] = flds[nallele*i];
+          for (int32_t j=1; j < nallele; ++j) {
+            flds[i] += flds[nallele*i+j];
+          } 
         }
         n_flds = nsamples;
 
@@ -176,7 +175,7 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
       }
       
       if ( gfilt.minGQ > 0 ) {
-	if ( bcf_get_format_int32(odr->hdr, iv, "GQ", &flds, &n_flds) < 0 ) {
+	if ( bcf_get_format_int32(odr->hdr, iv, "GQ", &flds, &max_n_flds) < 0 ) {
 	  error("[E:%s:%d %s] Cannot find the field GQ from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
 	  
 	}
