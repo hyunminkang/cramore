@@ -13,6 +13,7 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
   int32_t xStart = 2699520;
   int32_t xStop = 154931044;
   int32_t minDPmaleX = -1;
+  int32_t minADmaleX = -1;
   std::string xLabel("X");
   std::string yLabel("Y");
   std::string mtLabel("MT");
@@ -29,12 +30,14 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
     LONG_STRING_PARAM("include-expr",&vfilt.include_expr, "Include sites for which expression is true")
     LONG_STRING_PARAM("exclude-expr",&vfilt.exclude_expr, "Exclude sites for which expression is true")    
 
-    LONG_PARAM_GROUP("Genotype Filtering Options", NULL)    
+    LONG_PARAM_GROUP("Genotype Filtering Options", NULL)
+    LONG_INT_PARAM("minAD",&gfilt.minAD,"Minimum allele depth threshold for filtering genotypes")
     LONG_INT_PARAM("minDP",&gfilt.minDP,"Minimum depth threshold for filtering genotypes")
-    LONG_INT_PARAM("minGQ",&gfilt.minGQ,"Minimum depth threshold for filtering genotypes")
+    LONG_INT_PARAM("minGQ",&gfilt.minGQ,"Minimum genotype quality threshold for filtering genotypes")
+    LONG_INT_PARAM("minAD-male-X",&minADmaleX,"Minimum allele depth threshold male X chromosomes for filtering genotypes") 
     LONG_INT_PARAM("minDP-male-X",&minDPmaleX,"Minimum depth threshold male X chromosomes for filtering genotypes")        
 
-    LONG_PARAM_GROUP("Sex Chromosomes (for --minDP option)",NULL)
+    LONG_PARAM_GROUP("Sex Chromosomes (for --minDP/AD options)",NULL)
     LONG_STRING_PARAM("sex-map",&sexMap, "Sex map file, containing ID and sex (1 for male and 2 for female) for each individual")    
     LONG_STRING_PARAM("x-label", &xLabel, "Contig name for X chromosome")
     LONG_STRING_PARAM("y-label", &yLabel, "Contig name for Y chromosome")
@@ -58,6 +61,7 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
 
   // if --minDP-male-X was not set, make it identical to minDP
   if ( minDPmaleX < 0 ) minDPmaleX = gfilt.minDP;
+  if ( minADmaleX < 0 ) minADmaleX = gfilt.minAD;
 
   std::vector<GenomeInterval> intervals;
   BCFOrderedReader* odr = new BCFOrderedReader(inVcfs[0], intervals);
@@ -150,6 +154,23 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
       }
 
       if ( gfilt.minDP > 0 ) {
+        if ( (n_flds = bcf_get_format_int32(odr->hdr, iv, "DP", &flds, &max_n_flds)) < 0 ) {
+          error("[E:%s:%d %s] Cannot find the field DP from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
+
+        }
+
+        for(int32_t i=0; i < nsamples; ++i) {
+          if ( ( ploidies[i] == 0 ) ||
+               ( ( ploidies[i] == 1 ) && ( flds[i] < minDPmaleX ) ) ||
+               ( ( ploidies[i] == 2 ) && ( flds[i] < gfilt.minDP ) ) ) {
+            gts[2*i] = bcf_gt_missing;
+            gts[2*i+1] = bcf_gt_missing;
+          }
+        }
+      }
+
+
+      if ( gfilt.minAD > 0 ) {
 	if ( (n_flds = bcf_get_format_int32(odr->hdr, iv, "AD", &flds, &max_n_flds)) < 0 ) {
 	  error("[E:%s:%d %s] Cannot find the field AD from the VCF file at position %s:%d",__FILE__,__LINE__,__FUNCTION__, bcf_hdr_id2name(odr->hdr, iv->rid), iv->pos+1);
 	  
@@ -166,8 +187,8 @@ int32_t cmdVcfSqueeze(int32_t argc, char** argv) {
 
 	for(int32_t i=0; i < nsamples; ++i) {
 	  if ( ( ploidies[i] == 0 ) ||
-	       ( ( ploidies[i] == 1 ) && ( flds[i] < minDPmaleX ) ) ||
-	       ( ( ploidies[i] == 2 ) && ( flds[i] < gfilt.minDP ) ) ) {
+	       ( ( ploidies[i] == 1 ) && ( flds[i] < minADmaleX ) ) ||
+	       ( ( ploidies[i] == 2 ) && ( flds[i] < gfilt.minAD ) ) ) {
 	    gts[2*i] = bcf_gt_missing;
 	    gts[2*i+1] = bcf_gt_missing;	    
 	  }

@@ -115,11 +115,13 @@ struct _bcf_vfilter_arg {
 };
 
 struct _bcf_gfilter_arg {
+  int32_t minAD;
   int32_t minDP;
   int32_t minGQ;
   //int32_t minAD;
 
   _bcf_gfilter_arg() {
+    minAD = 0;
     minDP = 0;
     minGQ = 0;
   }
