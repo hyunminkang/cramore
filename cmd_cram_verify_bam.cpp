@@ -246,7 +246,7 @@ int32_t cmdCramVerifyBam(int32_t argc, char** argv) {
 	}
 
 	for(it = it_l; it != it_r; ++it) {
-	  bam_get_base_and_qual_and_read_and_qual(b, (int32_t)it->first.pos1, base, qual, rpos, &readseq, &readqual);
+	  bam_get_base_and_qual_and_read_and_qual(b, (int32_t)it->first.pos1-1, base, qual, rpos, &readseq, &readqual);
 	  if ( rpos == BAM_READ_INDEX_NA ) {
 	    //if ( rand() % 1000 == 0 ) 
 	    //notice("Cannot find any informative read between %s:%d-%d at %s:%d", bam_get_chrom(sr.hdr, b), b->core.pos+1, bam_endpos(b), bcf_hdr_id2name(vr.cdr.hdr, scl.snps[i].rid), scl.snps[i].pos);
